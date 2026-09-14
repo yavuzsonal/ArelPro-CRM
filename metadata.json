@@ -1,0 +1,6 @@
+{
+  "name": "ArelPro - Kurumsal İlişkiler ve Faaliyet CRM",
+  "description": "İstanbul Arel Üniversitesi Kurumsal İlişkiler, Firma Portföyü, Faaliyet Yönetimi, Toplantı Tutanakları ve Otomatik Veritabanı/Excel Entegrasyon Sistemi",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
