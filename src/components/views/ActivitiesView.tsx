@@ -295,7 +295,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
       {/* KPI Metric Highlight Cards (Exact 5 Gradients from Screen 1) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Total Card */}
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#00478F] via-[#003166] to-[#00677d] p-4 text-white shadow-md flex flex-col justify-between min-h-[136px] group">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#00478F] via-[#003166] to-[#00677d] p-4 text-white shadow-md flex flex-col justify-between min-h-[136px] transition-all hover:-translate-y-1 cursor-pointer group">
           <div className="flex items-start justify-between z-10">
             <div className="flex flex-col">
               <span className="text-[11px] uppercase tracking-wider text-blue-200 font-bold">TOPLAM FAALİYET</span>
@@ -309,11 +309,11 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
             <span>Güz Dönemi İlerlemesi</span>
             <span className="font-bold text-white">%92 Hedef</span>
           </div>
-          <CalendarCheck className="w-24 h-24 text-white/10 absolute -right-3 -bottom-3 pointer-events-none" />
+          <CalendarCheck className="w-24 h-24 text-white/10 absolute -right-3 -bottom-3 pointer-events-none group-hover:scale-110 transition-transform" />
         </div>
 
         {/* Markalı Dersler (Blue Gradient) */}
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] p-4 text-white shadow-md flex flex-col justify-between min-h-[136px] group">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] p-4 text-white shadow-md flex flex-col justify-between min-h-[136px] transition-all hover:-translate-y-1 cursor-pointer group">
           <div className="flex items-start justify-between z-10">
             <div className="flex flex-col">
               <span className="text-[11px] uppercase tracking-wider text-blue-100 font-bold">Markalı Dersler</span>
@@ -327,11 +327,11 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
             <span>Kayıtlı Öğrenci</span>
             <span className="font-bold text-white">420 Aktif</span>
           </div>
-          <BookOpen className="w-24 h-24 text-white/10 absolute -right-3 -bottom-3 pointer-events-none" />
+          <BookOpen className="w-24 h-24 text-white/10 absolute -right-3 -bottom-3 pointer-events-none group-hover:scale-110 transition-transform" />
         </div>
 
         {/* Teknik Geziler (Secondary / Cyan Gradient) */}
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#00677d] to-[#004e5f] p-4 text-white shadow-md flex flex-col justify-between min-h-[136px] group">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#00677d] to-[#004e5f] p-4 text-white shadow-md flex flex-col justify-between min-h-[136px] transition-all hover:-translate-y-1 cursor-pointer group">
           <div className="flex items-start justify-between z-10">
             <div className="flex flex-col">
               <span className="text-[11px] uppercase tracking-wider text-[#b3ebff] font-bold">Teknik Geziler</span>
@@ -345,11 +345,11 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
             <span>Sanayi Ziyareti</span>
             <span className="font-bold text-white">365 Katılımcı</span>
           </div>
-          <Bus className="w-24 h-24 text-white/10 absolute -right-3 -bottom-3 pointer-events-none" />
+          <Bus className="w-24 h-24 text-white/10 absolute -right-3 -bottom-3 pointer-events-none group-hover:scale-110 transition-transform" />
         </div>
 
         {/* Proje (Emerald Gradient) */}
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#10B981] to-[#059669] p-4 text-white shadow-md flex flex-col justify-between min-h-[136px] group">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#10B981] to-[#059669] p-4 text-white shadow-md flex flex-col justify-between min-h-[136px] transition-all hover:-translate-y-1 cursor-pointer group">
           <div className="flex items-start justify-between z-10">
             <div className="flex flex-col">
               <span className="text-[11px] uppercase tracking-wider text-emerald-100 font-bold">Proje</span>
@@ -363,11 +363,11 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
             <span>Onaylı Fon</span>
             <span className="font-bold text-white">₺3.8M Toplam</span>
           </div>
-          <FolderGit2 className="w-24 h-24 text-white/10 absolute -right-3 -bottom-3 pointer-events-none" />
+          <FolderGit2 className="w-24 h-24 text-white/10 absolute -right-3 -bottom-3 pointer-events-none group-hover:scale-110 transition-transform" />
         </div>
 
         {/* Seminer & Zirve (Amber Gradient) */}
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#F59E0B] to-[#D97706] p-4 text-white shadow-md flex flex-col justify-between min-h-[136px] group">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#F59E0B] to-[#D97706] p-4 text-white shadow-md flex flex-col justify-between min-h-[136px] transition-all hover:-translate-y-1 cursor-pointer group">
           <div className="flex items-start justify-between z-10">
             <div className="flex flex-col">
               <span className="text-[11px] uppercase tracking-wider text-amber-100 font-bold">Seminer & Zirve</span>
@@ -381,7 +381,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
             <span>Etkileşim</span>
             <span className="font-bold text-white">1,840 Dinleyici</span>
           </div>
-          <Mic className="w-24 h-24 text-white/10 absolute -right-3 -bottom-3 pointer-events-none" />
+          <Mic className="w-24 h-24 text-white/10 absolute -right-3 -bottom-3 pointer-events-none group-hover:scale-110 transition-transform" />
         </div>
       </div>
 
