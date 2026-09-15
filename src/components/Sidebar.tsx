@@ -67,7 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <div className="w-10 h-10 rounded-xl bg-white border border-[#E2E8F0] flex items-center justify-center p-0.5 shrink-0 shadow-2xs overflow-hidden">
             <img 
-              src="/arel-logo.svg" 
+              src={`${import.meta.env.BASE_URL}arel-logo.svg`}
               alt="İstanbul Arel Üniversitesi Logo" 
               className="w-full h-full object-contain"
               referrerPolicy="no-referrer"
