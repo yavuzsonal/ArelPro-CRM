@@ -5,13 +5,15 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // GitHub Pages serves this project at yavuzsonal.github.io/ArelPro-CRM/,
+    // so all built asset URLs must be prefixed with the repo name.
+    base: '/ArelPro-CRM/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
     },
-    base:'/ArelPro-CRM/'
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
