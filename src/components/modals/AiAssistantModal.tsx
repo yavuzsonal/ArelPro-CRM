@@ -30,8 +30,8 @@ interface AiAssistantModalProps {
   companies: Company[];
   activities?: Activity[];
   meetings?: Meeting[];
-  onAddMeeting?: (meeting: Meeting) => void;
-  onAddActivity?: (activity: Activity) => void;
+  onAddMeeting?: (meeting: Meeting) => void | Promise<void>;
+  onAddActivity?: (activity: Activity) => void | Promise<void>;
   onNavigateTab?: (tab: string) => void;
   selectedCompany?: Company;
   onApplyActivityData?: (data: Partial<Activity>) => void;
@@ -108,12 +108,12 @@ Aşağıdaki hızlı komutlardan birini seçebilir veya isteğinizi doğrudan ya
   if (!isOpen) return null;
 
   // Approve a proposed meeting
-  const handleApproveMeeting = (messageId: string, meetingToApprove: Meeting) => {
+  const handleApproveMeeting = async (messageId: string, meetingToApprove: Meeting) => {
     try {
       if (onAddMeeting) {
-        onAddMeeting(meetingToApprove);
+        await onAddMeeting(meetingToApprove);
       } else {
-        StorageService.addMeeting(meetingToApprove);
+        await StorageService.addMeeting(meetingToApprove);
       }
 
       setMessages(prev => {
@@ -141,8 +141,9 @@ Aşağıdaki hızlı komutlardan birini seçebilir veya isteğinizi doğrudan ya
           },
         ];
       });
-    } catch (err) {
-      console.error('Failed to approve meeting:', err);
+    } catch (error) {
+      console.error('Failed to approve meeting:', error);
+      alert(error instanceof Error ? error.message : 'Toplantı kaydedilemedi.');
     }
   };
 

@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Company, Meeting, MeetingFormat, MeetingPurposeType } from '../../types';
 import { ExcelService } from '../../services/excelService';
-import { StorageService } from '../../services/storageService';
 import { 
   Calendar, 
   Clock, 
@@ -39,8 +38,9 @@ import {
 interface MeetingsViewProps {
   companies: Company[];
   meetings: Meeting[];
-  onAddMeeting: (m: Meeting) => void;
-  onAddCompany?: (c: Company) => void;
+  onAddMeeting: (m: Meeting) => void | Promise<void>;
+  onUpdateMeeting: (id: string, updates: Partial<Meeting>) => void | Promise<void>;
+  onAddCompany?: (c: Company) => void | Promise<void>;
   onOpenNewMeetingModal?: (companyId?: string) => void;
 }
 
@@ -48,6 +48,7 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
   companies,
   meetings,
   onAddMeeting,
+  onUpdateMeeting,
   onAddCompany,
 }) => {
   // --- Institution Selection: "Firma Kartı Bulunanlar" vs "Yeni Firma" ---
@@ -94,6 +95,7 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
 
   // Form feedback state
   const [formFeedback, setFormFeedback] = useState<string | null>(null);
+  const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
 
   // --- Bottom Section: Lists & Filters ---
   const [activeListTab, setActiveListTab] = useState<'upcoming' | 'past' | 'all'>('upcoming');
@@ -145,7 +147,7 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
   };
 
   // Handle Form Submit
-  const handleCreateMeeting = (e: React.FormEvent) => {
+  const handleCreateMeeting = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validation
@@ -171,7 +173,7 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
       targetCompanyId = `comp-${Date.now()}`;
 
       // Automatically register company card if requested
-      if (autoSaveCompanyCard && onAddCompany) {
+      if (!editingMeeting && autoSaveCompanyCard && onAddCompany) {
         const createdCompany: Company = {
           id: targetCompanyId,
           code: `AREL-2026-${Math.floor(Math.random() * 800) + 100}`,
@@ -202,9 +204,14 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
             score: 50,
           },
           notes: 'Toplantı kaydı üzerinden sisteme yeni firma kartı olarak eklendi.',
-          createdAt: new Date().toISOString().slice(0, 10),
+          createdAt: editingMeeting?.createdAt || new Date().toISOString().slice(0, 10),
         };
-        onAddCompany(createdCompany);
+        try {
+          await onAddCompany(createdCompany);
+        } catch (error) {
+          alert(error instanceof Error ? error.message : 'Firma kaydedilemedi.');
+          return;
+        }
       }
     }
 
@@ -214,10 +221,10 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
     }
 
     const newMeetingRecord: Meeting = {
-      id: `mtg-${Date.now()}`,
-      code: `MTG-2026-${Math.floor(Math.random() * 800) + 100}`,
+      id: editingMeeting?.id || `mtg-${Date.now()}`,
+      code: editingMeeting?.code || `MTG-${new Date().getFullYear()}-${Math.floor(Math.random() * 800) + 100}`,
       title: meetingTitle.trim(),
-      companyId: targetCompanyId,
+      companyId: editingMeeting?.companyId || targetCompanyId,
       companyName: targetCompanyName,
       date: meetingDate,
       timeRange,
@@ -244,11 +251,18 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
       createdAt: new Date().toISOString().slice(0, 10),
     };
 
-    onAddMeeting(newMeetingRecord);
+    try {
+      if (editingMeeting) await onUpdateMeeting(editingMeeting.id, newMeetingRecord);
+      else await onAddMeeting(newMeetingRecord);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : editingMeeting ? 'Toplantı güncellenemedi.' : 'Toplantı kaydedilemedi.');
+      return;
+    }
 
     // Provide visual feedback
-    setFormFeedback(`"${targetCompanyName}" ile "${meetingTitle}" toplantısı başarıyla kaydedildi.`);
+    setFormFeedback(`"${targetCompanyName}" ile "${meetingTitle}" toplantısı ${editingMeeting ? 'güncellendi' : 'kaydedildi'}.`);
     setTimeout(() => setFormFeedback(null), 6000);
+    setEditingMeeting(null);
 
     // Reset meeting specific fields
     setMeetingTitle('');
@@ -290,7 +304,7 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
   }, [meetings]);
 
   const pastMeetings = useMemo(() => {
-    return meetings.filter(m => m.status === 'Tamamlandı' || m.status === 'Ertelendi');
+    return meetings.filter(m => m.status === 'Tamamlandı' || m.status === 'Ertelendi' || m.status === 'İptal Edildi');
   }, [meetings]);
 
   const displayedMeetings = useMemo(() => {
@@ -324,14 +338,53 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
     setCompletionNotes(meeting.decisionsAndActions !== 'Toplantı planlandı; gündem maddeleri ve heyet katılımı teyit edildi.' ? meeting.decisionsAndActions : '');
   };
 
-  const saveMeetingCompletion = () => {
+  const saveMeetingCompletion = async () => {
     if (!completingMeeting) return;
-    const updated = StorageService.updateMeeting(completingMeeting.id, {
-      status: 'Tamamlandı',
-      decisionsAndActions: completionNotes.trim() || 'Toplantı başarıyla icra edildi, kararlar tutanağa bağlandı.',
-    });
-    // Trigger update in parent or storage
-    window.location.reload();
+    try {
+      await onUpdateMeeting(completingMeeting.id, {
+        status: 'Tamamlandı',
+        decisionsAndActions: completionNotes.trim() || 'Toplantı başarıyla icra edildi, kararlar tutanağa bağlandı.',
+      });
+      setCompletingMeeting(null);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Toplantı güncellenemedi.');
+    }
+  };
+
+  const handleEditMeeting = (meeting: Meeting) => {
+    setEditingMeeting(meeting);
+    setMeetingStatus(meeting.status === 'Tamamlandı' ? 'Tamamlandı' : 'Planlandı');
+    const company = companies.find(item => item.id === meeting.companyId);
+    setInstitutionMode(company ? 'existing' : 'new');
+    if (company) setSelectedCompanyId(company.id);
+    setNewCompanyName(company ? '' : meeting.companyName);
+    setNewCompanySector(meeting.companySector || '');
+    setCompanyAttendees(meeting.companyAttendees);
+    setArelAttendees(meeting.arelAttendees);
+    setArelOrganizer(meeting.moderator);
+    setArelDepartment(meeting.department);
+    setMeetingFormat(meeting.format);
+    setMeetingPurposeType(meeting.meetingType as MeetingPurposeType);
+    setLocationDetails(meeting.location);
+    setMeetingTitle(meeting.title);
+    setAgendaNotes(meeting.agendaItems);
+    setMeetingTargetOutcome(meeting.purpose || '');
+    setMeetingDate(meeting.date);
+    setTimeRange(meeting.timeRange);
+    setDurationMinutes(meeting.durationMinutes);
+    setDecisionsAndActions(meeting.decisionsAndActions);
+    setAdditionalNotes(meeting.notes || '');
+    document.getElementById('meeting-entry-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleCancelMeeting = async (meeting: Meeting) => {
+    if (!window.confirm(`"${meeting.title}" toplantısını iptal etmek istiyor musunuz?`)) return;
+    try {
+      await onUpdateMeeting(meeting.id, { status: 'İptal Edildi' });
+      setFormFeedback(`"${meeting.title}" toplantısı iptal edildi.`);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Toplantı iptal edilemedi.');
+    }
   };
 
   return (
@@ -394,7 +447,7 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
       {/* ======================================================== */}
       {/* PRIMARY WORKBENCH: YENİ TOPLANTI & GÖRÜŞME EKLEME FORMU */}
       {/* ======================================================== */}
-      <section className="bg-white rounded-2xl border border-[#00478F]/20 shadow-md overflow-hidden">
+      <section id="meeting-entry-form" className="bg-white rounded-2xl border border-[#00478F]/20 shadow-md overflow-hidden">
         {/* Form Header */}
         <div className="bg-gradient-to-r from-[#00478F] to-[#00677d] px-6 py-4 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -403,9 +456,9 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold tracking-tight">Yeni Toplantı & Görüşme Kaydı</h2>
+                <h2 className="text-base font-bold tracking-tight">{editingMeeting ? 'Toplantı Kaydını Düzenle' : 'Yeni Toplantı & Görüşme Kaydı'}</h2>
                 <span className="px-2 py-0.5 rounded-full bg-white/20 text-[11px] font-semibold text-white">
-                  Ana Giriş Masası
+                  {editingMeeting ? 'Düzenleme Modu' : 'Ana Giriş Masası'}
                 </span>
               </div>
               <p className="text-xs text-white/80 mt-0.5">
@@ -1006,6 +1059,12 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
               >
                 Temizle
               </button>
+              {editingMeeting && (
+                <button type="button" onClick={() => setEditingMeeting(null)}
+                  className="px-4 h-10 rounded-xl border border-[#E2E8F0] text-[#64748B] font-bold text-xs">
+                  Düzenlemeyi İptal Et
+                </button>
+              )}
 
               <button
                 type="submit"
@@ -1013,7 +1072,9 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
               >
                 <Check className="w-4 h-4" />
                 <span>
-                  {meetingStatus === 'Planlandı'
+                  {editingMeeting
+                    ? 'Değişiklikleri Kaydet'
+                    : meetingStatus === 'Planlandı'
                     ? 'Toplantıyı Planla & Takvime Ekle'
                     : 'Görüşme Tutanağını Sisteme Kaydet'}
                 </span>
@@ -1155,7 +1216,9 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                         mtg.status === 'Tamamlandı'
                           ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-blue-100 text-blue-800'
+                                  : mtg.status === 'İptal Edildi'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-blue-100 text-blue-800'
                       }`}>
                         {mtg.status}
                       </span>
@@ -1265,6 +1328,16 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => handleEditMeeting(mtg)}
+                        className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[#00478F] font-bold text-xs hover:bg-blue-50">
+                        Düzenle
+                      </button>
+                      {mtg.status !== 'İptal Edildi' && mtg.status !== 'Tamamlandı' && (
+                        <button type="button" onClick={() => void handleCancelMeeting(mtg)}
+                          className="px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 font-bold text-xs hover:bg-rose-100">
+                          İptal Et
+                        </button>
+                      )}
                       {/* Mark Completed Button if Planned */}
                       {isPlanned && (
                         <button
@@ -1329,7 +1402,7 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({
                     <span className="px-2.5 py-1 rounded-md bg-slate-100 text-[#1E293B] text-xs font-bold">
                       {inspectedMeeting.format}
                     </span>
-                    <span className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 text-xs font-bold">
+                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${inspectedMeeting.status === 'İptal Edildi' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
                       {inspectedMeeting.status}
                     </span>
                   </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Search, 
   Plus, 
@@ -10,11 +10,14 @@ import {
   CalendarCheck, 
   Users2, 
   Settings,
+  LogOut,
   X,
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  Menu
 } from 'lucide-react';
 import { Company, Activity, Meeting } from '../types';
+import { getCrmNotifications } from '../services/notificationService';
 
 interface HeaderProps {
   onOpenAiModal: () => void;
@@ -24,6 +27,14 @@ interface HeaderProps {
   onOpenNewActivityModal?: () => void;
   companies?: Company[];
   onSelectCompany?: (comp: Company) => void;
+  username: string;
+  displayName: string;
+  onLogout: () => void;
+  activities: Activity[];
+  meetings: Meeting[];
+  onOpenNotification: (kind: 'activity' | 'meeting', recordId: string) => void;
+  onToggleSidebar?: () => void;
+  mobileSidebarOpen?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -34,11 +45,23 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewActivityModal,
   companies = [],
   onSelectCompany,
+  username,
+  displayName,
+  onLogout,
+  activities = [],
+  meetings = [],
+  onOpenNotification,
+  onToggleSidebar,
+  mobileSidebarOpen = false,
 }) => {
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const notifications = useMemo(() => getCrmNotifications(activities, meetings), [activities, meetings]);
+  const logout = () => {
+    if (window.confirm('Hesabınızdan çıkış yapmak istiyor musunuz?')) onLogout();
+  };
 
   const searchResults = searchQuery.trim()
     ? companies.filter(c =>
@@ -51,8 +74,13 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="w-full h-[68px] bg-white border-b border-[#E2E8F0] px-4 md:px-6 flex items-center justify-between shadow-2xs shrink-0 sticky top-0 z-20">
       {/* Search Bar */}
-      <div className="flex items-center gap-3 flex-1 max-w-xl">
-        <div className="relative w-full max-w-md">
+      <div className="flex min-w-0 items-center gap-2 flex-1 max-w-xl">
+        <button type="button" onClick={onToggleSidebar} aria-label="Menüyü aç"
+          aria-expanded={mobileSidebarOpen}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#00478F] hover:bg-[#f1f4f7] md:hidden">
+          <Menu className="h-5 w-5" />
+        </button>
+        <div className="relative w-full max-w-[110px] sm:max-w-md">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]" />
           <input
             type="text"
@@ -119,16 +147,16 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center gap-3 relative">
+      <div className="flex items-center gap-1.5 sm:gap-3 relative">
         {/* Gemini AI status pill */}
         <button
           type="button"
           onClick={onOpenAiModal}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition-colors cursor-pointer shadow-2xs"
+          className="hidden items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition-colors cursor-pointer shadow-2xs lg:flex"
           title="Arel Kurumsal AI Asistanı"
         >
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="text-xs font-bold text-emerald-800">Gemini 2.5 Flash</span>
+          <span className="text-xs font-bold text-emerald-800">AI Asistan</span>
           <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
         </button>
 
@@ -207,31 +235,49 @@ export const Header: React.FC<HeaderProps> = ({
             title="Sistem Bildirimleri"
           >
             <Bell className="w-4 h-4" />
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
+            {notifications.length > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-500 ring-2 ring-white text-white text-[9px] font-bold flex items-center justify-center">
+                {notifications.length > 99 ? '99+' : notifications.length}
+              </span>
+            )}
           </button>
 
           {showNotifications && (
             <div className="absolute right-0 top-11 w-80 bg-white rounded-xl shadow-xl border border-[#E2E8F0] p-3 z-50 animate-in fade-in slide-in-from-top-2">
               <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0] mb-2">
-                <span className="text-xs font-bold text-[#1E293B]">Kurumsal Bildirimler</span>
-                <span className="text-[10px] font-semibold text-[#00478F]">Tümünü Oku</span>
+                <span className="text-xs font-bold text-[#1E293B]">Bildirimler ({notifications.length})</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (notifications[0]) {
+                      onOpenNotification(notifications[0].kind, notifications[0].recordId);
+                      setShowNotifications(false);
+                    }
+                  }}
+                  disabled={notifications.length === 0}
+                  className="text-[10px] font-semibold text-[#00478F] disabled:text-slate-400"
+                >
+                  İlk bildirimi aç
+                </button>
               </div>
               <div className="flex flex-col gap-2">
-                <div className="p-2.5 rounded-lg bg-blue-50/60 border border-blue-100 flex items-start gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-[#00478F] shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <div className="font-bold text-[#1E293B]">TEI TUSAŞ Teknik Gezisi Onaylandı</div>
-                    <div className="text-[10px] text-[#64748B] mt-0.5">45 Makine & Havacılık öğrencisi kontenjanı ayrıldı.</div>
-                  </div>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-100 flex items-start gap-2.5">
-                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <div className="font-bold text-[#1E293B]">Veritabanı Eşitlemesi Başarılı</div>
-                    <div className="text-[10px] text-[#64748B] mt-0.5">Son otomatik senkronizasyon tamamlandı.</div>
-                  </div>
-                </div>
+                {notifications.length > 0 ? notifications.slice(0, 8).map(notification => (
+                  <button
+                    key={notification.id}
+                    type="button"
+                    onClick={() => {
+                      onOpenNotification(notification.kind, notification.recordId);
+                      setShowNotifications(false);
+                    }}
+                    className="w-full p-2.5 rounded-lg bg-blue-50/60 border border-blue-100 text-left hover:bg-blue-100/70 transition-colors"
+                  >
+                    <span className="block text-xs font-bold text-[#1E293B]">{notification.title}</span>
+                    <span className="block text-[10px] text-[#64748B] mt-0.5">{notification.detail}</span>
+                    <span className="block text-[10px] text-[#00478F] mt-1">{notification.date}</span>
+                  </button>
+                )) : (
+                  <p className="p-3 text-center text-xs text-[#64748B]">Yaklaşan veya işlem bekleyen kayıt yok.</p>
+                )}
               </div>
             </div>
           )}
@@ -240,8 +286,18 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Settings button */}
         <button
           type="button"
-          onClick={onNavigateSettings}
+          onClick={logout}
           className="p-2 rounded-lg text-[#64748B] hover:bg-[#f1f4f7] hover:text-[#181c1e] transition-colors cursor-pointer"
+          title="Güvenli çıkış yap"
+          aria-label="Güvenli çıkış yap"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
+
+        <button
+          type="button"
+          onClick={onNavigateSettings}
+          className="hidden p-2 rounded-lg text-[#64748B] hover:bg-[#f1f4f7] hover:text-[#181c1e] transition-colors cursor-pointer md:inline-flex"
           title="Veritabanı ve Excel Ayarları"
         >
           <Settings className="w-4 h-4" />
@@ -250,11 +306,11 @@ export const Header: React.FC<HeaderProps> = ({
         {/* User Avatar */}
         <div 
           onClick={onNavigateSettings}
-          className="flex items-center gap-2 pl-1 cursor-pointer group"
-          title="Yavuz Selim Önal (Kurumsal İlişkiler Yöneticisi)"
+          className="hidden items-center gap-2 pl-1 cursor-pointer group md:flex"
+          title={displayName || username}
         >
           <div className="w-8 h-8 rounded-full bg-[#00478F] text-white flex items-center justify-center font-bold text-xs ring-1 ring-slate-200">
-            YS
+            {(displayName || username).slice(0, 2).toLocaleUpperCase('tr-TR')}
           </div>
         </div>
       </div>

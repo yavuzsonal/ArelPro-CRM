@@ -5,7 +5,7 @@ import { X, Building2, User, Phone, Mail, FileText, CheckCircle2 } from 'lucide-
 interface NewCompanyModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (company: Company) => void;
+  onSave: (company: Company) => void | Promise<void>;
 }
 
 export const NewCompanyModal: React.FC<NewCompanyModalProps> = ({ isOpen, onClose, onSave }) => {
@@ -34,7 +34,7 @@ export const NewCompanyModal: React.FC<NewCompanyModalProps> = ({ isOpen, onClos
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       alert('Lütfen firma adını giriniz.');
@@ -76,8 +76,12 @@ export const NewCompanyModal: React.FC<NewCompanyModalProps> = ({ isOpen, onClos
       createdAt: new Date().toISOString().slice(0, 10),
     };
 
-    onSave(newCompany);
-    onClose();
+    try {
+      await onSave(newCompany);
+      onClose();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Firma kaydedilemedi.');
+    }
   };
 
   return (

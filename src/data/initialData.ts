@@ -635,45 +635,23 @@ export const INITIAL_CALENDAR_EVENTS: CalendarEvent[] = [
 ];
 
 export const INITIAL_DB_CONFIG: DatabaseSyncConfig = {
-  syncMode: 'auto',
-  frequencyMinutes: 60,
+  syncMode: 'manual',
+  syncFrequency: 'MANUAL',
   dbType: 'PostgreSQL',
-  connectionString: 'postgresql://arel_crm_svc:********@db.arel.edu.tr:5432/arel_corporate_db',
-  apiEndpoint: 'https://api.arel.edu.tr/v2/corporate-relations/sync',
-  apiKeyOrToken: 'arel_live_crm_token_99xbc4278',
-  tableName: 'crm_companies_activities_v2',
+  host: '',
+  port: 5432,
+  databaseName: '',
+  username: '',
+  password: '',
+  apiEndpoint: '',
+  tableName: '',
   autoMapColumns: true,
-  lastSyncTime: 'Bugün, 09:30 (Otomatik)',
-  nextSyncTime: 'Bugün, 10:30 (1 saatte bir)',
+  lastSyncDate: 'Senkronizasyon yapilmadi',
+  isConnected: false,
   isSyncing: false,
-  status: 'connected',
+  status: 'idle',
   errorCount: 0,
-  successCount: 1420,
+  successCount: 0,
 };
 
-export const INITIAL_SYNC_LOGS: SyncLog[] = [
-  {
-    id: 'log-1',
-    timestamp: '18 Kasım 2026 09:30:12',
-    source: 'Harici Veritabanı (SQL/API)',
-    recordsProcessed: 48,
-    status: 'Başarılı',
-    message: 'Üniversite Kurumsal Portföy ve TTO tablosuyla tam senkronizasyon sağlandı.',
-  },
-  {
-    id: 'log-2',
-    timestamp: '17 Kasım 2026 16:45:00',
-    source: 'Excel Dosyası',
-    recordsProcessed: 14,
-    status: 'Başarılı',
-    message: 'Kasım_2026_Firma_Listesi_Guncel.xlsx dosyasından 14 yeni firma ve 6 faaliyet aktarıldı.',
-  },
-  {
-    id: 'log-3',
-    timestamp: '16 Kasım 2026 11:20:45',
-    source: 'AI Tutanak Çözümleme',
-    recordsProcessed: 1,
-    status: 'Başarılı',
-    message: 'Gemini 3.6 ile VEM İlaç toplantı tutanağı otomatik parse edildi ve veri tabanına kaydedildi.',
-  }
-];
+export const INITIAL_SYNC_LOGS: SyncLog[] = [];

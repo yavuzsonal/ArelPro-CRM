@@ -43,6 +43,51 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateTab,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const currentMonthKey = todayKey.slice(0, 7);
+  const activeProtocols = companies.filter(company => company.protocolStatus === 'Aktif').length;
+  const meetingCountThisMonth = meetings.filter(meeting => meeting.date.startsWith(currentMonthKey)).length;
+  const activityCountThisMonth = activities.filter(activity => activity.date.startsWith(currentMonthKey)).length;
+  const completedActivities = activities.filter(activity => activity.status === 'Tamamlandı');
+  const attendedStudents = completedActivities.reduce((total, activity) => total + (activity.attendedStudents ?? 0), 0);
+  const averageAttendance = completedActivities.length ? Math.round(attendedStudents / completedActivities.length) : 0;
+  const completionRate = activities.length ? completedActivities.length / activities.length : 0;
+  const protocolCounts = {
+    active: activeProtocols,
+    inProgress: companies.filter(company => company.protocolStatus === 'İmza Aşamasında' || company.protocolStatus === 'Müzakere').length,
+    inactive: companies.filter(company => company.protocolStatus === 'Pasif' || company.protocolStatus === 'Protokol Yok').length,
+  };
+  const totalProtocols = protocolCounts.active + protocolCounts.inProgress + protocolCounts.inactive;
+  const activeProtocolRate = totalProtocols ? protocolCounts.active / totalProtocols : 0;
+  const departmentCounts = new Map<string, number>();
+  activities.forEach(activity => {
+    const department = activity.department || 'Bölüm belirtilmedi';
+    departmentCounts.set(department, (departmentCounts.get(department) || 0) + 1);
+  });
+  const departmentActivityCounts = [...departmentCounts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 5);
+  const upcomingActivities = activities
+    .filter(activity => activity.status === 'Planlandı' && activity.date >= todayKey)
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .slice(0, 4);
+  const upcomingMeetings = meetings
+    .filter(meeting => (meeting.status === 'Planlandı' || meeting.status === 'İmza Aşamasında') && meeting.date >= todayKey)
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .slice(0, 4);
+  const monthlySeries = Array.from({ length: 6 }, (_, index) => {
+    const month = new Date();
+    month.setDate(1);
+    month.setMonth(month.getMonth() - 5 + index);
+    const key = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+    return {
+      label: month.toLocaleDateString('tr-TR', { month: 'short' }),
+      activities: activities.filter(activity => activity.date.startsWith(key)).length,
+      meetings: meetings.filter(meeting => meeting.date.startsWith(key)).length,
+    };
+  });
+  const maxMonthlyCount = Math.max(1, ...monthlySeries.flatMap(month => [month.activities, month.meetings]));
 
   // Filter recent activities and meetings for the master table
   const filteredActivities = activities.filter(a =>
@@ -65,7 +110,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Kurumsal İlişkiler İcra Paneli
             </h1>
             <span className="px-2 py-0.5 rounded-full bg-[#b3ebff] text-[#004e5f] text-xs font-bold">
-              Güz 2026-2027
+              {new Date().toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })}
             </span>
           </div>
           <p className="text-xs text-[#64748B] mt-0.5">
@@ -77,7 +122,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
           <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#f1f4f7] text-[#1E293B] text-xs font-semibold">
             <Calendar className="w-4 h-4 text-[#64748B]" />
-            <span>2026-2027 Akademik Yılı</span>
+            <span>{new Date().getFullYear()} Akademik Yılı</span>
           </div>
           <button
             type="button"
@@ -106,12 +151,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="relative z-10">
             <div className="text-3xl font-extrabold tracking-tight mb-2">
-              {companies.length > 0 ? companies.length * 6 + 102 : 486}
+              {companies.length}
             </div>
             <div className="flex items-center justify-between pt-2 border-t border-white/20 text-xs">
               <span className="text-white/90">Protokollü Firma</span>
               <span className="font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">
-                {companies.filter(c => c.protocolStatus === 'Aktif').length * 40 + 31}
+                {activeProtocols}
               </span>
             </div>
           </div>
@@ -131,11 +176,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="relative z-10">
             <div className="text-3xl font-extrabold tracking-tight mb-2">
-              {activities.length > 0 ? activities.length * 30 + 1461 : '1,641'}
+              {activities.length}
             </div>
             <div className="flex items-center justify-between pt-2 border-t border-white/20 text-xs">
-              <span className="text-white/90">Bu Ay Gerçekleşen</span>
-              <span className="font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">+213</span>
+              <span className="text-white/90">Bu Ay Kayıt</span>
+              <span className="font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">{activityCountThisMonth}</span>
             </div>
           </div>
         </div>
@@ -154,11 +199,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="relative z-10">
             <div className="text-3xl font-extrabold tracking-tight mb-2">
-              {meetings.length > 0 ? meetings.length * 15 + 766 : 826}
+              {meetings.length}
             </div>
             <div className="flex items-center justify-between pt-2 border-t border-white/20 text-xs">
-              <span className="text-white/90">Bu Ay Yapılan</span>
-              <span className="font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">142 Görüşme</span>
+              <span className="text-white/90">Bu Ay Toplantı</span>
+              <span className="font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">{meetingCountThisMonth} Bu Ay</span>
             </div>
           </div>
         </div>
@@ -176,10 +221,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="relative z-10">
-            <div className="text-3xl font-extrabold tracking-tight mb-2">42,562</div>
+            <div className="text-3xl font-extrabold tracking-tight mb-2">{attendedStudents.toLocaleString('tr-TR')}</div>
             <div className="flex items-center justify-between pt-2 border-t border-white/20 text-xs">
               <span className="text-white/90">Etkinlik Başına Ort.</span>
-              <span className="font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">54 Öğrenci</span>
+              <span className="font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">{averageAttendance} Ort.</span>
             </div>
           </div>
         </div>
@@ -207,55 +252,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
 
-            {/* SVG Dual Wave Graph */}
-            <div className="w-full h-56 relative my-2">
-              <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 540 180">
-                <defs>
-                  <linearGradient id="gradEmeraldDash" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#10B981" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
-                  </linearGradient>
-                  <linearGradient id="gradBlueDash" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-
-                <line stroke="#E2E8F0" strokeDasharray="3 3" x1="20" x2="530" y1="20" y2="20" />
-                <line stroke="#E2E8F0" strokeDasharray="3 3" x1="20" x2="530" y1="60" y2="60" />
-                <line stroke="#E2E8F0" strokeDasharray="3 3" x1="20" x2="530" y1="100" y2="100" />
-                <line stroke="#E2E8F0" strokeDasharray="3 3" x1="20" x2="530" y1="140" y2="140" />
-
-                <text fill="#94A3B8" fontSize="9" x="5" y="24">70</text>
-                <text fill="#94A3B8" fontSize="9" x="5" y="64">50</text>
-                <text fill="#94A3B8" fontSize="9" x="5" y="104">30</text>
-                <text fill="#94A3B8" fontSize="9" x="5" y="144">10</text>
-
-                {/* Wave 1: Faaliyetler */}
-                <path d="M 30,50 C 90,60 120,120 180,115 C 240,110 270,30 330,35 C 390,40 420,130 480,125 L 530,100" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" />
-                <path d="M 30,50 C 90,60 120,120 180,115 C 240,110 270,30 330,35 C 390,40 420,130 480,125 L 530,100 L 530,160 L 30,160 Z" fill="url(#gradEmeraldDash)" />
-
-                {/* Wave 2: Toplantılar */}
-                <path d="M 30,135 C 90,125 120,70 180,72 C 240,75 270,128 330,122 C 390,115 420,45 480,48 L 530,75" fill="none" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
-                <path d="M 30,135 C 90,125 120,70 180,72 C 240,75 270,128 330,122 C 390,115 420,45 480,48 L 530,75 L 530,160 L 30,160 Z" fill="url(#gradBlueDash)" />
-
-                <circle cx="30" cy="50" r="4" fill="#10B981" stroke="#FFFFFF" strokeWidth="2" />
-                <circle cx="180" cy="115" r="4" fill="#10B981" stroke="#FFFFFF" strokeWidth="2" />
-                <circle cx="330" cy="35" r="4" fill="#10B981" stroke="#FFFFFF" strokeWidth="2" />
-                <circle cx="480" cy="125" r="4" fill="#10B981" stroke="#FFFFFF" strokeWidth="2" />
-
-                <circle cx="30" cy="135" r="4" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="2" />
-                <circle cx="180" cy="72" r="4" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="2" />
-                <circle cx="330" cy="122" r="4" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="2" />
-                <circle cx="480" cy="48" r="4" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="2" />
-
-                <text fill="#64748B" fontSize="10" fontWeight="500" x="25" y="172">Ekim</text>
-                <text fill="#64748B" fontSize="10" fontWeight="500" x="110" y="172">Kasım</text>
-                <text fill="#64748B" fontSize="10" fontWeight="500" x="205" y="172">Aralık</text>
-                <text fill="#64748B" fontSize="10" fontWeight="500" x="310" y="172">Ocak</text>
-                <text fill="#64748B" fontSize="10" fontWeight="500" x="405" y="172">Şubat</text>
-                <text fill="#64748B" fontSize="10" fontWeight="500" x="500" y="172">Mart</text>
-              </svg>
+            <div className="grid h-56 grid-cols-6 items-end gap-3 border-b border-[#E2E8F0] px-2 py-4">
+              {monthlySeries.map(month => (
+                <div key={month.label} className="flex h-full flex-col items-center justify-end gap-2">
+                  <div className="flex h-full w-full items-end justify-center gap-1">
+                    <div title={`${month.activities} faaliyet`} className="w-4 rounded-t bg-emerald-500"
+                      style={{ height: `${Math.max(3, month.activities / maxMonthlyCount * 100)}%` }} />
+                    <div title={`${month.meetings} toplantı`} className="w-4 rounded-t bg-blue-500"
+                      style={{ height: `${Math.max(3, month.meetings / maxMonthlyCount * 100)}%` }} />
+                  </div>
+                  <span className="text-[10px] capitalize text-[#64748B]">{month.label}</span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -265,14 +273,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <CheckCircle2 className="w-5 h-5 text-emerald-500" />
               <div>
                 <div className="text-[11px] text-[#64748B]">Katılım & Gerçekleşme</div>
-                <div className="text-xs font-bold text-[#1E293B]">%84.2 Verimlilik</div>
+                <div className="text-xs font-bold text-[#1E293B]">{completedActivities.length} tamamlanan faaliyet</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-[#00478F]" />
               <div>
                 <div className="text-[11px] text-[#64748B]">İş Birliği Artışı</div>
-                <div className="text-xs font-bold text-[#00478F]">+%18.5 Geçen Döneme Göre</div>
+                <div className="text-xs font-bold text-[#00478F]">{activities.length} kayıtlı faaliyet</div>
               </div>
             </div>
           </div>
@@ -283,10 +291,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-start justify-between">
             <div>
               <span className="text-xs text-[#64748B] font-medium">Kurumsal Protokoller</span>
-              <div className="text-2xl font-bold text-[#1E293B] mt-1">906</div>
+              <div className="text-2xl font-bold text-[#1E293B] mt-1">{totalProtocols}</div>
             </div>
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#f1f4f7] text-emerald-600 text-xs font-bold">
-              <span>+9.7%</span>
+              <span>%{Math.round(activeProtocolRate * 100)}</span>
               <TrendingUp className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -294,12 +302,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-center my-3 relative">
             <svg className="w-36 h-36" viewBox="0 0 120 120">
               <circle cx="60" cy="60" fill="none" r="44" stroke="#F1F5F9" strokeWidth="14" />
-              <circle cx="60" cy="60" fill="none" r="44" stroke="#10B981" strokeDasharray="276.46" strokeDashoffset="70.77" strokeLinecap="round" strokeWidth="14" transform="rotate(-90 60 60)" />
-              <circle cx="60" cy="60" fill="none" r="44" stroke="#3B82F6" strokeDasharray="276.46" strokeDashoffset="220.89" strokeLinecap="round" strokeWidth="14" transform="rotate(177.8 60 60)" />
-              <circle cx="60" cy="60" fill="none" r="44" stroke="#94A3B8" strokeDasharray="276.46" strokeDashoffset="261.25" strokeLinecap="round" strokeWidth="14" transform="rotate(250.2 60 60)" />
+              <circle cx="60" cy="60" fill="none" r="44" stroke="#10B981" strokeDasharray="276.46"
+                strokeDashoffset={276.46 * (1 - activeProtocolRate)} strokeLinecap="round" strokeWidth="14" transform="rotate(-90 60 60)" />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-lg font-bold text-[#1E293B]">74.4%</span>
+              <span className="text-lg font-bold text-[#1E293B]">{Math.round(activeProtocolRate * 100)}%</span>
               <span className="text-[10px] text-[#64748B]">Aktif</span>
             </div>
           </div>
@@ -308,21 +315,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex flex-col">
               <div className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-[#10B981] shrink-0"></span>
-                <span className="text-xs font-bold text-[#1E293B]">674</span>
+                <span className="text-xs font-bold text-[#1E293B]">{protocolCounts.active}</span>
               </div>
               <span className="text-[10px] text-[#64748B] truncate">Aktif</span>
             </div>
             <div className="flex flex-col text-center">
               <div className="flex items-center justify-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-[#3B82F6] shrink-0"></span>
-                <span className="text-xs font-bold text-[#1E293B]">182</span>
+                <span className="text-xs font-bold text-[#1E293B]">{protocolCounts.inProgress}</span>
               </div>
               <span className="text-[10px] text-[#64748B] truncate">Görüşmede</span>
             </div>
             <div className="flex flex-col text-right">
               <div className="flex items-center justify-end gap-1">
                 <span className="w-2 h-2 rounded-full bg-[#94A3B8] shrink-0"></span>
-                <span className="text-xs font-bold text-[#1E293B]">50</span>
+                <span className="text-xs font-bold text-[#1E293B]">{protocolCounts.inactive}</span>
               </div>
               <span className="text-[10px] text-[#64748B] truncate">Pasif</span>
             </div>
@@ -334,10 +341,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-start justify-between">
             <div>
               <span className="text-xs text-white/80 font-medium">Öğrenci Katılım Özeti</span>
-              <div className="text-2xl font-extrabold text-white mt-1">14,820</div>
+              <div className="text-2xl font-extrabold text-white mt-1">{attendedStudents.toLocaleString('tr-TR')}</div>
             </div>
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 text-white text-xs font-bold">
-              <span>12.4%</span>
+              <span>%{Math.round(completionRate * 100)} tamamlandı</span>
               <TrendingUp className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -345,12 +352,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-center my-3 relative">
             <svg className="w-36 h-36" viewBox="0 0 120 120">
               <circle cx="60" cy="60" fill="none" r="44" stroke="rgba(255,255,255,0.15)" strokeWidth="14" />
-              <circle cx="60" cy="60" fill="none" r="44" stroke="#50d9fe" strokeDasharray="276" strokeDashoffset="70" strokeLinecap="round" strokeWidth="14" transform="rotate(-90 60 60)" />
-              <circle cx="60" cy="60" fill="none" r="44" stroke="#FFFFFF" strokeDasharray="276" strokeDashoffset="220" strokeLinecap="round" strokeWidth="14" transform="rotate(70 60 60)" />
+              <circle cx="60" cy="60" fill="none" r="44" stroke="#50d9fe" strokeDasharray="276"
+                strokeDashoffset={276 * (1 - completionRate)} strokeLinecap="round" strokeWidth="14" transform="rotate(-90 60 60)" />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-lg font-bold text-white">76%</span>
-              <span className="text-[10px] text-white/80">Lisans</span>
+              <span className="text-lg font-bold text-white">{Math.round(completionRate * 100)}%</span>
+              <span className="text-[10px] text-white/80">Tamamlandı</span>
             </div>
           </div>
 
@@ -358,16 +365,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-white"></span>
-                <span className="text-xs font-bold text-white">11,240</span>
+                <span className="text-xs font-bold text-white">{completedActivities.length}</span>
               </div>
-              <span className="text-[10px] text-white/80">Lisans Düzeyi</span>
+              <span className="text-[10px] text-white/80">Tamamlanan</span>
             </div>
             <div className="flex flex-col text-right">
               <div className="flex items-center justify-end gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#50d9fe]"></span>
-                <span className="text-xs font-bold text-white">3,580</span>
+                <span className="text-xs font-bold text-white">{activities.length - completedActivities.length}</span>
               </div>
-              <span className="text-[10px] text-white/80">Ön Lisans</span>
+              <span className="text-[10px] text-white/80">Diğer durumlar</span>
             </div>
           </div>
         </div>
@@ -383,37 +390,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <p className="text-xs text-[#64748B]">Dönem içi en yüksek faaliyet ve iş birliği üreten akademik birimler</p>
             </div>
             <span className="px-2 py-0.5 rounded-md bg-[#ebeef1] text-xs font-bold text-[#64748B]">
-              Top 5
+              İlk 5
             </span>
           </div>
 
           <div className="flex flex-col gap-2.5 my-3">
-            {[
-              { rank: 1, name: 'Kurumsal İlişkiler ve İletişim Ofisi', tag: 'Merkez Birim', stat: '42 Faaliyet • 18 Protokol', perf: 98 },
-              { rank: 2, name: 'Teknoloji Transfer Ofisi (TTO)', tag: 'Ar-Ge & Proje', stat: '34 Proje & Faaliyet • 6 TÜBİTAK/Ar-Ge', perf: 92 },
-              { rank: 3, name: 'Mühendislik Fak. - Bilgisayar Mühendisliği', tag: 'Markalı Ders', stat: '28 Faaliyet • 4 Markalı Ders', perf: 87 },
-              { rank: 4, name: 'Sağlık Bilimleri Fak. - Hemşirelik Bölümü', tag: 'Sağlık Protokolü', stat: '22 Faaliyet • 3 Hastane Protokolü', perf: 81 },
-              { rank: 5, name: 'İİBF - İşletme (İngilizce)', tag: 'Sektör Buluşması', stat: '19 Faaliyet • 5 Sektör Buluşması', perf: 75 },
-            ].map(item => (
-              <div key={item.rank} className="flex items-center justify-between p-2 rounded-lg hover:bg-[#f1f4f7] transition-colors">
+            {departmentActivityCounts.map(([department, count], index) => (
+              <div key={department} className="flex items-center justify-between p-2 rounded-lg hover:bg-[#f1f4f7] transition-colors">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-7 h-7 rounded-lg bg-[#00478F]/10 text-[#00478F] flex items-center justify-center text-xs font-bold shrink-0">
-                    {item.rank}
+                    {index + 1}
                   </div>
                   <div className="min-w-0 truncate">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-[#1E293B] truncate">{item.name}</span>
+                      <span className="text-xs font-bold text-[#1E293B] truncate">{department}</span>
                       <span className="px-1.5 py-0.2 rounded text-[9px] bg-blue-100 text-blue-800 font-bold shrink-0">
-                        {item.tag}
+                        {count} faaliyet
                       </span>
                     </div>
-                    <span className="text-[11px] text-[#64748B] truncate block">{item.stat}</span>
+                    <span className="text-[11px] text-[#64748B] truncate block">Kayıtlı faaliyet sayısı</span>
                   </div>
                 </div>
                 <div className="flex flex-col items-end shrink-0 pl-2">
-                  <span className="text-xs font-bold text-[#1E293B]">%{item.perf}</span>
+                  <span className="text-xs font-bold text-[#1E293B]">{count}</span>
                   <div className="w-16 h-1.5 bg-[#ebeef1] rounded-full mt-1 overflow-hidden">
-                    <div className="bg-[#00478F] h-full rounded-full" style={{ width: `${item.perf}%` }}></div>
+                    <div className="bg-[#00478F] h-full rounded-full" style={{ width: `${Math.min(100, count / Math.max(1, departmentActivityCounts[0]?.[1] ?? 1) * 100)}%` }}></div>
                   </div>
                 </div>
               </div>
@@ -445,7 +446,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="flex flex-col gap-2.5 my-3">
-            {companies.slice(0, 5).map((comp, idx) => (
+            {[...companies]
+              .sort((left, right) => right.stats.totalActivities - left.stats.totalActivities)
+              .slice(0, 5)
+              .map((comp, idx) => (
               <div 
                 key={comp.id} 
                 onClick={() => onSelectCompany(comp)}
@@ -506,7 +510,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-[#1E293B]">Son Kurumsal Faaliyetler & İletişim Kayıtları</h2>
               <span className="px-2 py-0.5 rounded-full bg-[#f1f4f7] text-[#424751] text-[10px] font-bold">
-                Canlı Akış
+                SQLite
               </span>
             </div>
             <p className="text-xs text-[#64748B] mt-0.5">
@@ -591,7 +595,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div className="text-[11px] text-[#64748B] truncate max-w-xs">{act.location}</div>
                   </td>
                   <td className="py-3.5 px-4 font-bold text-[#1E293B]">
-                    {act.attendedStudents || act.targetStudents} Katılımcı
+                    {act.attendedStudents ?? 0} Katılımcı
                   </td>
                   <td className="py-3.5 px-4">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${

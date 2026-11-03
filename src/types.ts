@@ -115,7 +115,7 @@ export interface Activity {
 }
 
 export type MeetingFormat = 'Yüz Yüze' | 'Çevrimiçi / Online' | 'Hibrit';
-export type MeetingStatus = 'Tamamlandı' | 'Planlandı' | 'İmza Aşamasında' | 'Ertelendi';
+export type MeetingStatus = 'Tamamlandı' | 'Planlandı' | 'İmza Aşamasında' | 'Ertelendi' | 'İptal Edildi';
 
 export type MeetingPurposeType = 
   | 'Protokol & Sözleşme' 
@@ -168,7 +168,7 @@ export interface CalendarEvent {
   location: string;
   companyName: string;
   participantsCount?: string;
-  status: 'Tamamlandı' | 'Planlandı' | 'Bugün';
+  status: 'Tamamlandı' | 'Planlandı' | 'Bugün' | 'İptal Edildi';
   description?: string;
   keyNote?: string;
   referenceId?: string;
@@ -176,19 +176,31 @@ export interface CalendarEvent {
 
 export interface DatabaseSyncConfig {
   syncMode: 'auto' | 'manual';
-  frequencyMinutes: number; // e.g. 15, 60, 1440
-  dbType: 'PostgreSQL' | 'Oracle' | 'MySQL' | 'REST_API' | 'SQL_Server';
-  connectionString: string;
+  syncFrequency: 'HOURLY' | 'DAILY' | 'EVERY_6_HOURS' | 'MANUAL';
+  dbType: 'PostgreSQL' | 'MSSQL' | 'MySQL' | 'Oracle' | 'REST_API' | 'SQLite';
+  host: string;
+  port: number;
+  databaseName: string;
+  username: string;
+  password: string;
   apiEndpoint: string;
-  apiKeyOrToken: string;
   tableName: string;
   autoMapColumns: boolean;
+  lastSyncDate: string;
   lastSyncTime?: string;
   nextSyncTime?: string;
+  isConnected: boolean;
   isSyncing: boolean;
   status: 'connected' | 'idle' | 'error' | 'syncing';
   errorCount: number;
   successCount: number;
+}
+
+export interface SyncResult {
+  success: boolean;
+  importedCount: number;
+  updatedCount: number;
+  message: string;
 }
 
 export interface SyncLog {

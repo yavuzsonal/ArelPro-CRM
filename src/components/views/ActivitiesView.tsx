@@ -38,23 +38,53 @@ import {
 interface ActivitiesViewProps {
   companies: Company[];
   activities: Activity[];
-  onAddActivity: (act: Activity) => void;
+  onAddActivity: (act: Activity) => void | Promise<void>;
+  onUpdateActivity: (id: string, updates: Partial<Activity>) => void | Promise<void>;
   onOpenAiModal: () => void;
   onNavigateTab: (tab: any) => void;
+  selectedActivityId?: string;
+  onClearSelectedActivity?: () => void;
 }
 
 export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
   companies,
   activities,
   onAddActivity,
+  onUpdateActivity,
   onOpenAiModal,
   onNavigateTab,
+  selectedActivityId,
+  onClearSelectedActivity,
 }) => {
   const [viewMode, setViewMode] = useState<'form' | 'table' | 'kanban'>('form');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [unitFilter, setUnitFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [detailsActivity, setDetailsActivity] = useState<Activity | null>(null);
+  const [activityDraft, setActivityDraft] = useState<Activity | null>(null);
+  const [savingActivityEdit, setSavingActivityEdit] = useState(false);
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const latestActivity = [...activities].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  const departmentCounts = new Map<string, number>();
+  activities.forEach(activity => {
+    const department = activity.department || 'Bölüm belirtilmedi';
+    departmentCounts.set(department, (departmentCounts.get(department) || 0) + 1);
+  });
+  const departmentActivityCounts = [...departmentCounts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3);
+  const typeCounts = new Map<string, number>();
+  activities.forEach(activity => typeCounts.set(activity.type, (typeCounts.get(activity.type) || 0) + 1));
+  const activityTypeCounts = [...typeCounts.entries()].sort((left, right) => right[1] - left[1]);
+
+  React.useEffect(() => {
+    if (!selectedActivityId) return;
+    const activity = activities.find(item => item.id === selectedActivityId);
+    if (activity) setDetailsActivity(activity);
+    onClearSelectedActivity?.();
+  }, [activities, onClearSelectedActivity, selectedActivityId]);
 
   // Form State for creating a new activity
   const [selectedType, setSelectedType] = useState<ActivityType>('Markalı Ders');
@@ -161,7 +191,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
 
   const selectedCompany = companies.find(c => c.id === selectedCompanyId) || companies[0];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalCompanyName = companyMode === 'existing' ? selectedCompany?.name || 'VEM İlaç San. ve Tic. A.Ş.' : customCompanyName;
 
@@ -215,9 +245,13 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
       createdAt: new Date().toISOString().slice(0, 10),
     };
 
-    onAddActivity(newAct);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3500);
+    try {
+      await onAddActivity(newAct);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3500);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Faaliyet kaydedilemedi.');
+    }
   };
 
   const filteredActivities = activities.filter(act => {
@@ -482,6 +516,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
               <option value="Tamamlandı">Tamamlandı</option>
               <option value="Planlandı">Planlandı / Yaklaşan</option>
               <option value="Onay Bekliyor">Onay Bekliyor</option>
+              <option value="İptal Edildi">İptal Edildi</option>
             </select>
           </div>
 
@@ -526,6 +561,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
                   <th className="py-3 px-4">Koordinatör & Bölüm</th>
                   <th className="py-3 px-4">Hedef Öğrenci</th>
                   <th className="py-3 px-4">Durum</th>
+                  <th className="py-3 px-4">İşlem</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E2E8F0]">
@@ -557,6 +593,10 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
                         {a.status}
                       </span>
                     </td>
+                    <td className="py-3 px-4">
+                      <button type="button" onClick={() => setDetailsActivity(a)}
+                        className="text-[#00478F] font-bold hover:underline">Detay</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -565,10 +605,175 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
         </div>
       )}
 
+      {detailsActivity && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4" role="presentation"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget) setDetailsActivity(null);
+          }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="activity-details-title"
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] p-5">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#00677d]">{detailsActivity.code} · {detailsActivity.type}</p>
+                <h2 id="activity-details-title" className="mt-1 text-lg font-bold text-[#00478F]">{detailsActivity.title}</h2>
+                <p className="mt-1 text-xs text-[#64748B]">{detailsActivity.companyName || 'Firma belirtilmedi'}</p>
+              </div>
+              <button type="button" onClick={() => setDetailsActivity(null)} aria-label="Detayları kapat"
+                className="rounded-lg px-3 py-1 text-sm font-bold text-[#64748B] hover:bg-slate-100">Kapat</button>
+            </header>
+            {activityDraft ? (
+              <form className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 text-xs" onSubmit={async event => {
+                event.preventDefault();
+                setSavingActivityEdit(true);
+                try {
+                  await onUpdateActivity(activityDraft.id, {
+                    title: activityDraft.title,
+                    date: activityDraft.date,
+                    timeRange: activityDraft.timeRange,
+                    location: activityDraft.location,
+                    department: activityDraft.department,
+                    coordinator: activityDraft.coordinator,
+                    targetStudents: activityDraft.targetStudents,
+                    attendedStudents: activityDraft.attendedStudents,
+                    status: activityDraft.status,
+                    description: activityDraft.description,
+                  });
+                  setDetailsActivity(activityDraft);
+                  setActivityDraft(null);
+                } catch (error) {
+                  alert(error instanceof Error ? error.message : 'Faaliyet güncellenemedi.');
+                } finally {
+                  setSavingActivityEdit(false);
+                }
+              }}>
+                {([
+                  ['title', 'Başlık'],
+                  ['date', 'Tarih'],
+                  ['timeRange', 'Saat'],
+                  ['location', 'Konum'],
+                  ['department', 'Bölüm'],
+                  ['coordinator', 'Koordinatör'],
+                ] as const).map(([field, label]) => (
+                  <label key={field} className="font-semibold text-[#475569]">
+                    {label}
+                    <input required value={activityDraft[field]} type={field === 'date' ? 'date' : 'text'}
+                      onChange={event => setActivityDraft(current => current ? { ...current, [field]: event.target.value } : current)}
+                      className="mt-1 h-10 w-full rounded-lg border border-[#E2E8F0] px-3 text-[#1E293B]" />
+                  </label>
+                ))}
+                <label className="font-semibold text-[#475569]">
+                  Hedef öğrenci
+                  <input type="number" min={0} value={activityDraft.targetStudents}
+                    onChange={event => setActivityDraft(current => current ? { ...current, targetStudents: Number(event.target.value) } : current)}
+                    className="mt-1 h-10 w-full rounded-lg border border-[#E2E8F0] px-3 text-[#1E293B]" />
+                </label>
+                <label className="font-semibold text-[#475569]">
+                  Katılan öğrenci
+                  <input type="number" min={0} value={activityDraft.attendedStudents ?? 0}
+                    onChange={event => setActivityDraft(current => current ? { ...current, attendedStudents: Number(event.target.value) } : current)}
+                    className="mt-1 h-10 w-full rounded-lg border border-[#E2E8F0] px-3 text-[#1E293B]" />
+                </label>
+                <label className="font-semibold text-[#475569]">
+                  Durum
+                  <select value={activityDraft.status}
+                    onChange={event => setActivityDraft(current => current ? { ...current, status: event.target.value as Activity['status'] } : current)}
+                    className="mt-1 h-10 w-full rounded-lg border border-[#E2E8F0] px-3 text-[#1E293B]">
+                    <option value="Planlandı">Planlandı</option>
+                    <option value="Onay Bekliyor">Onay Bekliyor</option>
+                    <option value="Tamamlandı">Tamamlandı</option>
+                    <option value="İptal Edildi">İptal Edildi</option>
+                  </select>
+                </label>
+                <label className="font-semibold text-[#475569] sm:col-span-2">
+                  Açıklama
+                  <textarea rows={3} value={activityDraft.description || ''}
+                    onChange={event => setActivityDraft(current => current ? { ...current, description: event.target.value } : current)}
+                    className="mt-1 w-full rounded-lg border border-[#E2E8F0] p-3 text-[#1E293B]" />
+                </label>
+                <div className="flex justify-end gap-2 sm:col-span-2">
+                  <button type="button" onClick={() => setActivityDraft(null)}
+                    className="rounded-lg border border-[#E2E8F0] px-4 py-2 font-bold text-[#64748B]">Vazgeç</button>
+                  <button type="submit" disabled={savingActivityEdit}
+                    className="rounded-lg bg-[#00478F] px-4 py-2 font-bold text-white disabled:opacity-50">
+                    {savingActivityEdit ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+            <dl className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 text-xs">
+              {[
+                ['Durum', detailsActivity.status],
+                ['Tarih', detailsActivity.date],
+                ['Saat', detailsActivity.timeRange],
+                ['Konum', detailsActivity.location],
+                ['Bölüm', detailsActivity.department],
+                ['Koordinasyon Birimi', detailsActivity.coordinationUnit],
+                ['Koordinatör', detailsActivity.coordinator],
+                ['Hedef / Katılımcı', `${detailsActivity.targetStudents} / ${detailsActivity.attendedStudents ?? 0}`],
+                ['Akademik Dönem', detailsActivity.academicTerm],
+                ['Ders Kodu', detailsActivity.courseCode],
+                ['Eğitmen', detailsActivity.instructorName],
+                ['AKTS / Kontenjan', detailsActivity.ectsCredits],
+                ['Proje Kodu', detailsActivity.projectCode],
+                ['Destek Programı', detailsActivity.fundingProgram],
+                ['Proje Bütçesi', detailsActivity.projectBudget],
+                ['Proje Süresi', detailsActivity.projectDuration],
+                ['Akademik Yürütücü', detailsActivity.academicLeader],
+                ['Sanayi Yürütücüsü', detailsActivity.industryLeader],
+                ['Bursiyer Sayısı', detailsActivity.scholarshipCount],
+                ['Fikri Mülkiyet Durumu', detailsActivity.patentIpStatus],
+                ['Ziyaret Tesisi', detailsActivity.tripFacility],
+                ['Ulaşım Bilgisi', detailsActivity.transportInfo],
+                ['Hareket Saati', detailsActivity.departureTime],
+                ['Güvenlik Prosedürü', detailsActivity.safetyProcedure],
+                ['Gezi Koordinatörü', detailsActivity.tripCoordinator],
+                ['Konuşmacılar', detailsActivity.speakers],
+                ['Etkinlik Formatı', detailsActivity.eventFormat],
+                ['Moderatör', detailsActivity.moderator],
+                ['Sertifika', detailsActivity.hasCertificate],
+                ['İkram Planı', detailsActivity.cateringPlan],
+                ['Faaliyet Kapsamı', detailsActivity.activityScope],
+                ['Gerekli Destek', detailsActivity.requiredSupport],
+                ['Kurumsal İrtibat', detailsActivity.corporateContact],
+              ].filter(([, value]) => value !== undefined && value !== '').map(([label, value]) => (
+                <div key={label} className="rounded-lg bg-slate-50 p-3">
+                  <dt className="font-semibold text-[#64748B]">{label}</dt>
+                  <dd className="mt-1 break-words font-bold text-[#1E293B]">{value || 'Belirtilmedi'}</dd>
+                </div>
+              ))}
+              {detailsActivity.description && (
+                <div className="sm:col-span-2 rounded-lg bg-slate-50 p-3">
+                  <dt className="font-semibold text-[#64748B]">Açıklama</dt>
+                  <dd className="mt-1 whitespace-pre-wrap text-[#1E293B]">{detailsActivity.description}</dd>
+                </div>
+              )}
+            </dl>
+            )}
+            {!activityDraft && (
+              <footer className="flex flex-wrap justify-end gap-2 border-t border-[#E2E8F0] p-4">
+                <button type="button" onClick={() => setActivityDraft(detailsActivity)}
+                  className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-xs font-bold text-[#00478F]">Düzenle</button>
+                {detailsActivity.status !== 'İptal Edildi' && (
+                  <button type="button" onClick={async () => {
+                    if (!window.confirm('Bu faaliyeti iptal etmek istiyor musunuz?')) return;
+                    try {
+                      await onUpdateActivity(detailsActivity.id, { status: 'İptal Edildi' });
+                      setDetailsActivity({ ...detailsActivity, status: 'İptal Edildi' });
+                    } catch (error) {
+                      alert(error instanceof Error ? error.message : 'Faaliyet iptal edilemedi.');
+                    }
+                  }} className="rounded-lg bg-rose-50 px-4 py-2 text-xs font-bold text-rose-700">Faaliyeti İptal Et</button>
+                )}
+              </footer>
+            )}
+          </section>
+        </div>
+      )}
+
       {/* VIEW: Kanban Mode */}
       {viewMode === 'kanban' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {['Onay Bekliyor', 'Planlandı', 'Tamamlandı'].map(stage => {
+          {['Onay Bekliyor', 'Planlandı', 'Tamamlandı', 'İptal Edildi'].map(stage => {
             const stageActs = activities.filter(a => a.status === stage || (stage === 'Planlandı' && a.status === 'Planlandı'));
             return (
               <div key={stage} className="bg-[#f1f4f7] rounded-xl p-4 border border-[#E2E8F0] flex flex-col gap-3">
@@ -1347,45 +1552,24 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
               <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs p-5 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-[#1E293B]">Faaliyet Türü Dağılımı</h3>
-                  <span className="text-xs text-[#00677d] font-bold">2026-2027 Güz</span>
+                  <span className="text-xs text-[#00677d] font-bold">{activities[0]?.academicTerm || 'Dönem belirtilmedi'}</span>
                 </div>
                 <div className="flex flex-col gap-3 pt-1 text-xs">
-                  <div>
-                    <div className="flex justify-between font-semibold mb-1">
-                      <span className="text-[#1E293B]">Seminer & Konferanslar (%40)</span>
-                      <span className="text-[#64748B]">19 Faaliyet • 1,840 Katılım</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#f1f4f7] rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-[#F59E0B] to-[#D97706] rounded-full" style={{ width: '40%' }}></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between font-semibold mb-1">
-                      <span className="text-[#1E293B]">Teknik Geziler (%25)</span>
-                      <span className="text-[#64748B]">12 Faaliyet • 365 Katılım</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#f1f4f7] rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-[#00677d] to-[#50d9fe] rounded-full" style={{ width: '25%' }}></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between font-semibold mb-1">
-                      <span className="text-[#1E293B]">Projeler (Ar-Ge & TÜBİTAK) (%19)</span>
-                      <span className="text-[#64748B]">9 Faaliyet • ₺3.8M Hacim</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#f1f4f7] rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-[#10B981] to-[#059669] rounded-full" style={{ width: '19%' }}></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between font-semibold mb-1">
-                      <span className="text-[#1E293B]">Markalı Dersler (%16)</span>
-                      <span className="text-[#64748B]">8 Faaliyet • 420 Öğrenci</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#f1f4f7] rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-[#3B82F6] to-[#1D4ED8] rounded-full" style={{ width: '16%' }}></div>
-                    </div>
-                  </div>
+                  {activityTypeCounts.map(([type, count]) => {
+                    const share = activities.length ? Math.round(count / activities.length * 100) : 0;
+                    return (
+                      <div key={type}>
+                        <div className="mb-1 flex justify-between font-semibold">
+                          <span className="text-[#1E293B]">{type} (%{share})</span>
+                          <span className="text-[#64748B]">{count} faaliyet</span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-[#f1f4f7]">
+                          <div className="h-full rounded-full bg-gradient-to-r from-[#00677d] to-[#50d9fe]" style={{ width: `${share}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {activities.length === 0 && <p className="text-[#64748B]">Henüz faaliyet kaydı yok.</p>}
                 </div>
               </div>
 
@@ -1396,36 +1580,16 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
                   <GraduationCap className="w-5 h-5 text-[#00677d]" />
                 </div>
                 <div className="flex flex-col gap-2.5 pt-2">
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#f1f4f7] text-xs">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-6 h-6 rounded-full bg-[#00478F] text-white flex items-center justify-center font-bold text-xs">1</span>
-                      <div>
-                        <div className="font-bold text-[#1E293B]">Teknoloji Transfer Ofisi (TTO)</div>
-                        <div className="text-[11px] text-[#64748B]">Sanayi İş Birlikleri & Patentler</div>
+                  {departmentActivityCounts.map(([department, count], index) => (
+                    <div key={department} className="flex items-center justify-between rounded-lg bg-[#f1f4f7] p-2.5 text-xs">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#00478F] text-xs font-bold text-white">{index + 1}</span>
+                        <span className="truncate font-bold text-[#1E293B]">{department}</span>
                       </div>
+                      <span className="shrink-0 font-bold text-[#00478F]">{count} faaliyet</span>
                     </div>
-                    <span className="font-bold text-[#00478F]">14 Faaliyet</span>
-                  </div>
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#f1f4f7] text-xs">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-6 h-6 rounded-full bg-[#00677d] text-white flex items-center justify-center font-bold text-xs">2</span>
-                      <div>
-                        <div className="font-bold text-[#1E293B]">Müh.-Mimarlık / Bilgisayar & Makine</div>
-                        <div className="text-[11px] text-[#64748B]">Teknik Geziler & Markalı Ders</div>
-                      </div>
-                    </div>
-                    <span className="font-bold text-[#00677d]">11 Faaliyet</span>
-                  </div>
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#f1f4f7] text-xs">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-6 h-6 rounded-full bg-slate-300 text-[#1E293B] flex items-center justify-center font-bold text-xs">3</span>
-                      <div>
-                        <div className="font-bold text-[#1E293B]">Sağlık Bilimleri & Eczacılık</div>
-                        <div className="text-[11px] text-[#64748B]">Hastane Protokolleri & Vaka</div>
-                      </div>
-                    </div>
-                    <span className="font-bold text-[#1E293B]">9 Faaliyet</span>
-                  </div>
+                  ))}
+                  {departmentActivityCounts.length === 0 && <p className="text-xs text-[#64748B]">Henüz birim kaydı yok.</p>}
                 </div>
               </div>
             </div>
@@ -1433,7 +1597,36 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
 
           {/* Inspector / Upcoming Column (4 Cols) */}
           <div className="xl:col-span-4 flex flex-col gap-5">
+            <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-md overflow-hidden">
+              <div className="p-4 bg-[#f1f4f7]/70 border-b border-[#E2E8F0]">
+                <h3 className="text-xs font-bold text-[#1E293B]">Yaklaşan Faaliyetler ({activities.filter(activity => activity.status === 'Planlandı' && activity.date >= todayKey).length})</h3>
+                <p className="mt-1 text-[10px] text-[#64748B]">Planlanan kayıtlar SQLite veritabanından yüklenir.</p>
+              </div>
+              <div className="flex flex-col gap-2 p-4">
+                {activities
+                  .filter(activity => activity.status === 'Planlandı' && activity.date >= todayKey)
+                  .sort((left, right) => left.date.localeCompare(right.date))
+                  .slice(0, 5)
+                  .map(activity => (
+                    <div key={activity.id} className="rounded-lg border border-[#E2E8F0] bg-slate-50 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-bold text-[#1E293B]">{activity.title}</p>
+                          <p className="mt-1 text-[10px] text-[#64748B]">{activity.date} · {activity.companyName || activity.type}</p>
+                        </div>
+                        <button type="button" onClick={() => setDetailsActivity(activity)}
+                          className="shrink-0 text-[10px] font-bold text-[#00478F] hover:underline">Detay</button>
+                      </div>
+                    </div>
+                  ))}
+                {activities.every(activity => activity.status !== 'Planlandı' || activity.date < todayKey) && (
+                  <p className="py-3 text-center text-xs text-[#64748B]">Yaklaşan planlı faaliyet bulunmuyor.</p>
+                )}
+              </div>
+            </div>
+
             {/* Expanded Yaklaşan Etkinlikler Card */}
+            {false && (
             <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-md overflow-hidden flex flex-col">
               <div className="p-4 bg-[#f1f4f7]/70 border-b border-[#E2E8F0] flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
@@ -1560,8 +1753,24 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
                 </button>
               </div>
             </div>
+            )}
 
             {/* Structured Card: Aktif Seçili Faaliyet Detayı */}
+            {latestActivity && (
+              <div className="bg-white rounded-xl shadow-xs border border-[#E2E8F0] overflow-hidden">
+                <div className="p-4 bg-gradient-to-br from-[#00478F] to-[#00677d] text-white">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Son Kaydedilen Faaliyet</span>
+                  <h3 className="mt-1 text-sm font-bold">{latestActivity.title}</h3>
+                  <p className="mt-1 text-[11px] text-white/80">{latestActivity.companyName || latestActivity.type} · {latestActivity.date}</p>
+                </div>
+                <div className="flex items-center justify-between p-4 text-xs">
+                  <span className="text-[#64748B]">{latestActivity.status} · {latestActivity.coordinator}</span>
+                  <button type="button" onClick={() => setDetailsActivity(latestActivity)}
+                    className="font-bold text-[#00478F] hover:underline">Detayları Gör</button>
+                </div>
+              </div>
+            )}
+            {false && (
             <div className="bg-white rounded-xl shadow-xs border border-[#E2E8F0] overflow-hidden flex flex-col">
               <div className={`p-4 text-white ${
                 selectedType === 'Proje'
@@ -1747,6 +1956,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
                 </button>
               </div>
             </div>
+            )}
           </div>
         </div>
       )}

@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { Company, Activity, Meeting } from '../types';
+import { getSafeExternalUrl } from './urlService';
 import { StorageService } from './storageService';
 
 export interface ParsedExcelResult {
@@ -10,6 +11,72 @@ export interface ParsedExcelResult {
   rawHeaders: string[];
   rawPreview: Record<string, any>[];
   errors: string[];
+}
+
+function reportSheet(
+  rows: Record<string, unknown>[],
+  headers: string[],
+): XLSX.WorkSheet {
+  const sheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+  sheet['!cols'] = headers.map(header => ({
+    wch: Math.min(42, Math.max(14, header.length + 3)),
+  }));
+  if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };
+  return sheet;
+}
+
+function addReportSummary(
+  workbook: XLSX.WorkBook,
+  title: string,
+  metrics: Array<[string, number]>,
+): void {
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ['ArelPro CRM - Rapor Özeti'],
+    ['Rapor', title],
+    ['Oluşturulma Tarihi', new Date().toLocaleDateString('tr-TR')],
+    ['Veri Kaynağı', 'Uygulama SQLite veritabanı'],
+    [],
+    ['Ölçüm', 'Kayıt Sayısı'],
+    ...metrics,
+  ]);
+  sheet['!cols'] = [{ wch: 28 }, { wch: 42 }];
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Rapor Özeti');
+}
+
+export function createCompaniesWorkbook(companies: Company[]): XLSX.WorkBook {
+  const workbook = XLSX.utils.book_new();
+  const data = companies.map(company => ({
+    'Firma Kodu': company.code,
+    'Firma Adı': company.name,
+    'Sektör': company.sector,
+    'Protokol Durumu': company.protocolStatus,
+    'Protokol No': company.protocolNumber || '-',
+    'İmza Tarihi': company.protocolSignDate || '-',
+    'Yenileme Tarihi': company.protocolRenewDate || '-',
+    'Yetkili Adı': company.contactPerson.name,
+    'Yetkili Unvanı': company.contactPerson.title,
+    'Yetkili Tel': company.contactPerson.phone,
+    'Yetkili E-Posta': company.contactPerson.email,
+    'Arel Sorumlusu': company.arelRepresentative.name,
+    'Sorumlu Birim': company.arelRepresentative.coordinationUnit,
+    'Toplam Faaliyet': company.stats.totalActivities,
+    'Katılan Öğrenci': company.stats.attendedStudents,
+    'Yapılan Toplantı': company.stats.totalMeetings,
+    'Aktif Stajyer': company.stats.activeInterns,
+    'Kurumsal Skor': company.stats.score,
+    'Adres': company.address,
+    'Web Sitesi': company.website,
+  }));
+  const headers = [
+    'Firma Kodu', 'Firma Adı', 'Sektör', 'Protokol Durumu', 'Protokol No',
+    'İmza Tarihi', 'Yenileme Tarihi', 'Yetkili Adı', 'Yetkili Unvanı',
+    'Yetkili Tel', 'Yetkili E-Posta', 'Arel Sorumlusu', 'Sorumlu Birim',
+    'Toplam Faaliyet', 'Katılan Öğrenci', 'Yapılan Toplantı', 'Aktif Stajyer',
+    'Kurumsal Skor', 'Adres', 'Web Sitesi',
+  ];
+  XLSX.utils.book_append_sheet(workbook, reportSheet(data, headers), 'Kurumsal Portföy');
+  addReportSummary(workbook, 'Firma Portföyü', [['Firma', companies.length]]);
+  return workbook;
 }
 
 export const ExcelService = {
@@ -133,34 +200,8 @@ export const ExcelService = {
    * Export current CRM companies to Excel
    */
   exportCompaniesToExcel(companies: Company[]): void {
-    const wb = XLSX.utils.book_new();
-
-    const data = companies.map(c => ({
-      'Firma Kodu': c.code,
-      'Firma Adı': c.name,
-      'Sektör': c.sector,
-      'Protokol Durumu': c.protocolStatus,
-      'Protokol No': c.protocolNumber || '-',
-      'İmza Tarihi': c.protocolSignDate || '-',
-      'Yenileme Tarihi': c.protocolRenewDate || '-',
-      'Yetkili Adı': c.contactPerson.name,
-      'Yetkili Unvanı': c.contactPerson.title,
-      'Yetkili Tel': c.contactPerson.phone,
-      'Yetkili E-Posta': c.contactPerson.email,
-      'Arel Sorumlusu': c.arelRepresentative.name,
-      'Sorumlu Birim': c.arelRepresentative.coordinationUnit,
-      'Toplam Faaliyet': c.stats.totalActivities,
-      'Katılan Öğrenci': c.stats.attendedStudents,
-      'Yapılan Toplantı': c.stats.totalMeetings,
-      'Aktif Stajyer': c.stats.activeInterns,
-      'Kurumsal Skor': c.stats.score,
-      'Adres': c.address,
-      'Web Sitesi': c.website,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, 'Kurumsal Portföy');
-    XLSX.writeFile(wb, `ArelPro_Firma_Portfoyu_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    const workbook = createCompaniesWorkbook(companies);
+    XLSX.writeFile(workbook, `ArelPro_Firma_Portfoyu_${new Date().toISOString().slice(0, 10)}.xlsx`);
   },
 
   /**
@@ -199,10 +240,22 @@ export const ExcelService = {
       'Durum': m.status,
     }));
 
-    const ws1 = XLSX.utils.json_to_sheet(actData);
+    addReportSummary(wb, 'Faaliyet ve Toplantı Raporu', [
+      ['Faaliyet', activities.length],
+      ['Toplantı', meetings.length],
+    ]);
+
+    const ws1 = reportSheet(actData, [
+      'Faaliyet Kodu', 'Faaliyet Başlığı', 'Tür', 'Firma', 'Tarih', 'Saat',
+      'Yer', 'Bölüm', 'Koordinatör', 'Hedef Öğrenci', 'Katılan', 'Durum',
+    ]);
     XLSX.utils.book_append_sheet(wb, ws1, 'Faaliyetler');
 
-    const ws2 = XLSX.utils.json_to_sheet(mtgData);
+    const ws2 = reportSheet(mtgData, [
+      'Toplantı Kodu', 'Toplantı Başlığı', 'Firma', 'Tarih', 'Saat', 'Format',
+      'Lokasyon', 'Firma Katılımcıları', 'Arel Heyeti', 'Moderatör',
+      'Karar / Aksiyon', 'Durum',
+    ]);
     XLSX.utils.book_append_sheet(wb, ws2, 'Toplantılar & Görüşmeler');
 
     XLSX.writeFile(wb, `ArelPro_Faaliyet_ve_Toplanti_Raporu_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -224,7 +277,12 @@ export const ExcelService = {
       'Karar / Aksiyon': m.decisionsAndActions,
       'Durum': m.status,
     }));
-    const ws = XLSX.utils.json_to_sheet(mtgData);
+    addReportSummary(wb, 'Toplantı Tutanakları', [['Toplantı', meetings.length]]);
+    const ws = reportSheet(mtgData, [
+      'Toplantı Kodu', 'Toplantı Başlığı', 'Firma', 'Tarih', 'Saat', 'Format',
+      'Lokasyon', 'Firma Katılımcıları', 'Arel Heyeti', 'Moderatör',
+      'Karar / Aksiyon', 'Durum',
+    ]);
     XLSX.utils.book_append_sheet(wb, ws, 'Toplantı Tutanakları');
     XLSX.writeFile(wb, `ArelPro_Toplanti_Tutanaklari_${new Date().toISOString().slice(0, 10)}.xlsx`);
   },
@@ -304,6 +362,7 @@ export const ExcelService = {
 
       const arelRepKey = Object.keys(row).find(k => /arel|sorumlu|koordinatör|hoca/i.test(k));
       const arelRepName = arelRepKey ? String(row[arelRepKey]) : 'Yavuz Selim Önal';
+      const websiteValue = String(row['Resmi Web Sitesi'] || row['Web'] || '');
 
       const comp: Partial<Company> = {
         id: `comp-excel-${Date.now()}-${index}`,
@@ -312,7 +371,9 @@ export const ExcelService = {
         shortName: companyName.slice(0, 2).toUpperCase(),
         sector: sector,
         address: String(row['Adres / Yerleşke'] || row['Adres'] || 'İstanbul'),
-        website: String(row['Resmi Web Sitesi'] || row['Web'] || 'https://www.arel.edu.tr'),
+        website: websiteValue
+          ? getSafeExternalUrl(websiteValue) || ''
+          : 'https://www.arel.edu.tr',
         scale: String(row['Ölçek'] || 'Orta / Büyük Ölçekli'),
         protocolStatus: protocolStatus,
         protocolNumber: String(row['Protokol No'] || `PRT-2026-${index + 100}`),
@@ -385,16 +446,16 @@ export const ExcelService = {
   /**
    * Commit parsed companies & activities to Storage
    */
-  commitImport(companies: Company[], activities: Activity[]): number {
+  async commitImport(companies: Company[], activities: Activity[]): Promise<number> {
     const existingCompanies = StorageService.getCompanies();
     const existingActivities = StorageService.getActivities();
 
-    StorageService.saveCompanies([...companies, ...existingCompanies]);
+    await StorageService.saveCompanies([...companies, ...existingCompanies]);
     if (activities.length > 0) {
-      StorageService.saveActivities([...activities, ...existingActivities]);
+      await StorageService.saveActivities([...activities, ...existingActivities]);
     }
 
-    StorageService.addSyncLog({
+    await StorageService.addSyncLog({
       source: 'Excel Dosyası',
       recordsProcessed: companies.length + activities.length,
       status: 'Başarılı',

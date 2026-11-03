@@ -2,6 +2,11 @@ node_modules/
 build/
 dist/
 coverage/
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite.app.lock
+data/*.sqlite-wal
+data/backups/
 .DS_Store
 *.log
 .env*

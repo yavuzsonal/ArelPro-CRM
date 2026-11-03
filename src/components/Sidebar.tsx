@@ -8,7 +8,6 @@ import {
   Calendar, 
   Sparkles, 
   FileSpreadsheet, 
-  Database, 
   FileCheck2, 
   ExternalLink, 
   Settings, 
@@ -26,6 +25,11 @@ interface SidebarProps {
   companiesCount?: number;
   activitiesCount?: number;
   meetingsCount?: number;
+  notificationCount?: number;
+  username?: string;
+  displayName?: string;
+  mobileOpen?: boolean;
+  onClose?: () => void;
   collapsed?: boolean;
 }
 
@@ -37,13 +41,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenAiModal,
   companiesCount = 0,
   activitiesCount = 0,
-  meetingsCount = 0
+  meetingsCount = 0,
+  notificationCount = 0,
+  username = '',
+  displayName = '',
+  mobileOpen = false,
+  onClose,
 }) => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const handleNavigate = (tab: ActiveTab) => {
     setActiveTab?.(tab);
     onNavigate?.(tab);
+    onClose?.();
   };
 
   const handleAi = () => {
@@ -53,12 +63,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isActive = (tab: string) => {
     if (activeTab === tab) return true;
-    if (tab === 'db-sync' && activeTab === 'settings') return true;
     return false;
   };
 
   return (
-    <aside className="w-[260px] shrink-0 h-screen bg-white border-r border-[#E2E8F0] flex flex-col justify-between select-none shadow-sm z-30 sticky top-0 overflow-y-auto">
+    <aside className={`fixed inset-y-0 left-0 z-50 h-screen w-[min(85vw,300px)] shrink-0 transform bg-white border-r border-[#E2E8F0] flex flex-col justify-between select-none shadow-xl transition-transform duration-200 md:static md:z-30 md:h-screen md:w-[260px] md:translate-x-0 md:shadow-sm ${
+      mobileOpen ? 'translate-x-0' : '-translate-x-full'
+    }`}>
       <div className="flex flex-col">
         {/* University Brand Header */}
         <div 
@@ -178,9 +189,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <Calendar className={`w-[18px] h-[18px] ${isActive('calendar') ? 'text-[#00478F]' : 'text-[#64748B]'}`} />
                   <span className="truncate">Zaman Akışı (Takvim)</span>
                 </div>
-                <span className="px-1.5 py-0.2 rounded-full bg-[#00478F] text-white text-[9px] font-bold">
-                  Canlı
-                </span>
+                {notificationCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-[#00478F] text-white text-[9px] font-bold">
+                    {notificationCount > 99 ? '99+' : notificationCount}
+                  </span>
+                )}
               </button>
             </nav>
           </div>
@@ -218,21 +231,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="truncate text-xs">Excel / RLX İçe Aktar</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => handleNavigate('db-sync')}
-                className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all text-left cursor-pointer ${
-                  isActive('db-sync')
-                    ? 'bg-[#f1f4f7] text-[#00478F] font-bold border-l-[3px] border-[#00B4D8]'
-                    : 'text-[#64748B] hover:bg-[#f1f4f7] hover:text-[#181c1e] font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Database className={`w-[18px] h-[18px] ${isActive('db-sync') ? 'text-[#00478F]' : 'text-[#64748B]'}`} />
-                  <span className="truncate text-xs">Veritabanı Entegrasyonu</span>
-                </div>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              </button>
             </nav>
           </div>
 
@@ -272,7 +270,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }`}
               >
                 <Settings className="w-[18px] h-[18px] text-[#64748B]" />
-                <span className="truncate text-xs">Ayarlar & API</span>
+                <span className="truncate text-xs">Ayarlar & Profil</span>
               </button>
             </nav>
           </div>
@@ -293,12 +291,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="flex items-center gap-2.5 p-2 rounded-lg bg-[#f1f4f7] hover:bg-slate-200 transition-colors border border-[#E2E8F0] cursor-pointer"
         >
           <div className="relative w-9 h-9 rounded-full bg-[#00478F] text-white flex items-center justify-center shrink-0 font-bold text-xs shadow-xs">
-            YS
+            {(displayName || username || 'AD').slice(0, 2).toLocaleUpperCase('tr-TR')}
             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
           </div>
           <div className="flex flex-col min-w-0 flex-1">
-            <span className="text-xs text-[#1E293B] font-bold truncate">Yavuz Selim Önal</span>
-            <span className="text-[10px] text-[#64748B] truncate font-medium">Kurumsal İlişkiler Yöneticisi</span>
+            <span className="text-xs text-[#1E293B] font-bold truncate">{displayName || username}</span>
+            <span className="text-[10px] text-[#64748B] truncate font-medium">{username}</span>
           </div>
           <button 
             type="button" 
@@ -321,7 +319,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-[#1E293B] hover:bg-[#f1f4f7] text-left cursor-pointer"
             >
               <Settings className="w-3.5 h-3.5 text-[#64748B]" />
-              <span>Hesap & Sistem Ayarları</span>
+              <span>Profilimi Görüntüle</span>
             </button>
             <button
               type="button"

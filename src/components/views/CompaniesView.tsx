@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Company, Activity, Meeting } from '../../types';
 import { ExcelService } from '../../services/excelService';
+import { getSafeExternalUrl } from '../../services/urlService';
 import { 
   Building2, 
   Search, 
@@ -334,9 +335,9 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                     <div>
                       <span className="text-[#64748B] text-[10px] uppercase font-bold block">Resmi Web Portalı</span>
                       <a
-                        href={activeCompany.website}
+                        href={getSafeExternalUrl(activeCompany.website) ?? undefined}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="text-[#00677d] hover:underline font-medium inline-flex items-center gap-1"
                       >
                         <span className="truncate max-w-[180px]">{activeCompany.website}</span>

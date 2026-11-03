@@ -7,7 +7,7 @@ interface NewMeetingModalProps {
   onClose: () => void;
   companies: Company[];
   initialCompanyId?: string;
-  onSave: (meeting: Meeting) => void;
+  onSave: (meeting: Meeting) => void | Promise<void>;
 }
 
 export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
@@ -31,7 +31,7 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
 
   const selectedComp = companies.find(c => c.id === companyId) || companies[0];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       alert('Lütfen toplantı başlığını giriniz.');
@@ -69,8 +69,12 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
       createdAt: new Date().toISOString().slice(0, 10),
     };
 
-    onSave(newMeeting);
-    onClose();
+    try {
+      await onSave(newMeeting);
+      onClose();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Toplantı kaydedilemedi.');
+    }
   };
 
   return (

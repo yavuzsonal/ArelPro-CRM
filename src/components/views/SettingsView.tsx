@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { DatabaseSyncConfig, SyncLog, Company, Activity, Meeting } from '../../types';
+import { Company, Activity, Meeting, DatabaseSyncConfig, SyncLog } from '../../types';
 import { DbSyncService } from '../../services/dbSyncService';
 import { ExcelService } from '../../services/excelService';
 import { StorageService } from '../../services/storageService';
 import { 
-  Database, 
+  Database,
   FileSpreadsheet, 
   RefreshCw, 
   CheckCircle2, 
@@ -20,6 +20,7 @@ import {
   FileText,
   Trash2,
   Lock,
+  Users2,
   ArrowDownToLine,
   ArrowUpFromLine
 } from 'lucide-react';
@@ -29,7 +30,10 @@ interface SettingsViewProps {
   activities: Activity[];
   meetings: Meeting[];
   onDataRefresh: () => void;
-  initialSubTab?: 'db' | 'excel' | 'logs' | 'general';
+  initialSubTab?: 'db' | 'excel' | 'logs' | 'general' | 'profile';
+  username?: string;
+  displayName?: string;
+  onProfileUpdated?: (displayName: string) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -37,9 +41,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   activities,
   meetings,
   onDataRefresh,
-  initialSubTab = 'db',
+  initialSubTab = 'profile',
+  username = '',
+  displayName = '',
+  onProfileUpdated,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'db' | 'excel' | 'logs' | 'general'>(initialSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<'db' | 'excel' | 'logs' | 'general' | 'profile'>(initialSubTab);
 
   // Sync subTab if prop changes
   React.useEffect(() => {
@@ -62,6 +69,84 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [importPreview, setImportPreview] = useState<any[] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState(displayName);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [creatingBackup, setCreatingBackup] = useState(false);
+
+  React.useEffect(() => setProfileName(displayName), [displayName]);
+
+  const handleSaveProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSavingProfile(true);
+    setProfileMessage(null);
+    setProfileError(null);
+    try {
+      const response = await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: profileName }),
+      });
+      const result = await response.json() as { displayName?: string; error?: string };
+      if (!response.ok || !result.displayName) throw new Error(result.error || 'Profil kaydedilemedi.');
+      setProfileName(result.displayName);
+      onProfileUpdated?.(result.displayName);
+      setProfileMessage('Profil adı güncellendi.');
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : 'Profil kaydedilemedi.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleChangePassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setProfileMessage(null);
+    setProfileError(null);
+    try {
+      const response = await fetch('/api/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const result = response.status === 204 ? {} : await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || 'Parola güncellenemedi.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setProfileMessage('Parola güncellendi. Diğer etkin oturumlar sonlandırıldı.');
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : 'Parola güncellenemedi.');
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    setCreatingBackup(true);
+    setTestResult(null);
+    try {
+      const response = await fetch('/api/admin/backup', { method: 'POST' });
+      if (!response.ok) {
+        const result = await response.json() as { error?: string };
+        throw new Error(result.error || 'Veritabanı yedeği alınamadı.');
+      }
+      const backupBlob = await response.blob();
+      const objectUrl = URL.createObjectURL(backupBlob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `arelpro-${new Date().toISOString().slice(0, 10)}.sqlite`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Veritabanı yedeği alınamadı.',
+      });
+    } finally {
+      setCreatingBackup(false);
+    }
+  };
 
   const handleTestConnection = async () => {
     setTestingConnection(true);
@@ -69,8 +154,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       const res = await DbSyncService.testConnection(config);
       setTestResult(res);
-    } catch (err: any) {
-      setTestResult({ success: false, message: 'Bağlantı hatası meydana geldi.' });
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Bağlantı testi başarısız oldu.',
+      });
     } finally {
       setTestingConnection(false);
     }
@@ -78,7 +166,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleSaveConfig = () => {
     DbSyncService.saveConfig(config);
-    setSyncSuccessMessage('Veritabanı yapılandırması başarıyla kaydedildi!');
+    setConfig(current => ({ ...current, password: '' }));
+    setSyncSuccessMessage('Ayarlar kaydedildi. Dış bağlantı/zamanlayıcı henüz etkin değil; parola tarayıcıda saklanmadı.');
     setTimeout(() => setSyncSuccessMessage(null), 3000);
   };
 
@@ -86,12 +175,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setSyncing(true);
     setSyncSuccessMessage(null);
     try {
-      const result = await DbSyncService.runSync();
+      const result = await DbSyncService.runSync(config);
       if (result.success) {
-        setSyncSuccessMessage(`${result.insertedRecords} yeni kayıt dış veritabanından çekildi ve CRM sistemine işlendi.`);
+        setSyncSuccessMessage(`${result.importedCount} yeni kayıt içe aktarıldı.`);
         setLogs(DbSyncService.getLogs());
         onDataRefresh();
+      } else {
+        setTestResult({ success: false, message: result.message });
       }
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Senkronizasyon başarısız oldu.',
+      });
     } finally {
       setSyncing(false);
     }
@@ -117,31 +213,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     if (!importPreview || importPreview.length === 0) return;
 
-    if (importType === 'companies') {
-      const existing = StorageService.getCompanies();
-      const updated = [...importPreview, ...existing];
-      StorageService.saveCompanies(updated);
-      setImportSuccess(`${importPreview.length} adet firma portföye başarıyla aktarıldı!`);
-    } else {
-      const existing = StorageService.getActivities();
-      const updated = [...importPreview, ...existing];
-      StorageService.saveActivities(updated);
-      setImportSuccess(`${importPreview.length} adet faaliyet listeye başarıyla aktarıldı!`);
-    }
+    try {
+      if (importType === 'companies') {
+        const existing = StorageService.getCompanies();
+        const updated = [...importPreview, ...existing];
+        await StorageService.saveCompanies(updated as Company[]);
+        setImportSuccess(`${importPreview.length} adet firma portföye başarıyla aktarıldı!`);
+      } else {
+        const existing = StorageService.getActivities();
+        const updated = [...importPreview, ...existing];
+        await StorageService.saveActivities(updated as Activity[]);
+        setImportSuccess(`${importPreview.length} adet faaliyet listeye başarıyla aktarıldı!`);
+      }
 
-    setImportPreview(null);
-    setExcelFile(null);
-    onDataRefresh();
+      setImportPreview(null);
+      setExcelFile(null);
+      await onDataRefresh();
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'İçe aktarma başarısız oldu.');
+    }
   };
 
-  const handleResetToSeed = () => {
+  const handleResetToSeed = async () => {
     if (window.confirm('Tüm verileri varsayılan başlangıç haline sıfırlamak istediğinize emin misiniz?')) {
-      StorageService.resetToSeed();
-      onDataRefresh();
-      alert('Tüm veritabanı başarıyla başlangıç verilerine sıfırlandı.');
+      try {
+        await StorageService.resetToSeed();
+        await onDataRefresh();
+        alert('Tüm veritabanı başarıyla başlangıç verilerine sıfırlandı.');
+      } catch (error) {
+        setTestResult({
+          success: false,
+          message: error instanceof Error ? error.message : 'Veriler sıfırlanamadı.',
+        });
+      }
     }
   };
 
@@ -152,34 +259,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs text-[#00677d] uppercase tracking-wider font-bold">
-              Sistem Mimarisi & Entegrasyonlar
+              Hesap & Sistem
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-[#E2E8F0]"></span>
-            <span className="text-xs text-[#64748B] font-semibold">Veri Köprüsü</span>
+            <span className="text-xs text-[#64748B] font-semibold">SQLite · Excel</span>
           </div>
           <h1 className="text-2xl font-bold text-[#00478F] tracking-tight">
-            Veritabanı Entegrasyonu & Excel Merkezi
+            Ayarlar
           </h1>
           <p className="text-xs text-[#64748B] mt-0.5">
-            Dış kurumsal veritabanlarından otomatik veri senkronizasyonu, Excel şablonlarıyla toplu aktarım ve sistem ayarları
+            Profil bilgilerinizi, yerel SQLite veritabanınızı ve Excel aktarımlarınızı yönetin.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={handleRunSyncNow}
-            disabled={syncing}
-            className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-[#00478F] hover:bg-[#00356B] text-white text-xs font-bold shadow-sm cursor-pointer disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            <span>{syncing ? 'Senkronize Ediliyor...' : 'Şimdi Otomatik Senkronize Et'}</span>
-          </button>
-        </div>
       </div>
 
       {/* Tabs */}
       <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-[#E2E8F0] shadow-xs">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('profile')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeSubTab === 'profile' ? 'bg-[#00478F] text-white shadow-xs' : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#f1f4f7]'
+          }`}
+        >
+          <Users2 className="w-4 h-4" />
+          <span>Profil</span>
+        </button>
         <button
           type="button"
           onClick={() => setActiveSubTab('db')}
@@ -188,7 +294,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           }`}
         >
           <Database className="w-4 h-4" />
-          <span>Veritabanı Entegrasyonu (Otomatik Çekme)</span>
+          <span>SQLite Veritabanı</span>
         </button>
         <button
           type="button"
@@ -202,16 +308,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </button>
         <button
           type="button"
-          onClick={() => setActiveSubTab('logs')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeSubTab === 'logs' ? 'bg-[#00478F] text-white shadow-xs' : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#f1f4f7]'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          <span>Senkronizasyon Günlüğü ({logs.length})</span>
-        </button>
-        <button
-          type="button"
           onClick={() => setActiveSubTab('general')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubTab === 'general' ? 'bg-[#00478F] text-white shadow-xs' : 'text-[#64748B] hover:text-[#1E293B] hover:bg-[#f1f4f7]'
@@ -222,8 +318,78 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </button>
       </div>
 
-      {/* SUBTAB 1: Veritabanı Entegrasyonu (User Requested: "Veritabanı entegrasyonu olacak. Verileri otomatik çekmesini istediğim bir veritabanı var") */}
+      {activeSubTab === 'profile' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <form onSubmit={handleSaveProfile} className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs p-6 flex flex-col gap-4">
+            <div>
+              <h2 className="text-sm font-bold text-[#1E293B]">Profil Bilgileri</h2>
+              <p className="text-xs text-[#64748B] mt-1">Bu yönetici hesabında görünen adı güncelleyin.</p>
+            </div>
+            <label className="text-xs font-semibold text-[#475569]">
+              Kullanıcı adı
+              <input value={username} readOnly className="w-full h-10 mt-1 px-3 rounded-lg bg-slate-100 border border-[#E2E8F0] text-[#64748B]" />
+            </label>
+            <label className="text-xs font-semibold text-[#475569]">
+              Görünen ad
+              <input value={profileName} onChange={event => setProfileName(event.target.value)} required minLength={2} maxLength={80}
+                className="w-full h-10 mt-1 px-3 rounded-lg bg-white border border-[#E2E8F0] text-[#1E293B]" />
+            </label>
+            <button type="submit" disabled={savingProfile} className="h-10 px-4 rounded-lg bg-[#00478F] text-white text-xs font-bold disabled:opacity-50">
+              {savingProfile ? 'Kaydediliyor...' : 'Profil Adını Kaydet'}
+            </button>
+          </form>
+
+          <form onSubmit={handleChangePassword} className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs p-6 flex flex-col gap-4">
+            <div>
+              <h2 className="text-sm font-bold text-[#1E293B]">Parola Değiştir</h2>
+              <p className="text-xs text-[#64748B] mt-1">Yeni parola en az 16 karakter olmalıdır.</p>
+            </div>
+            <label className="text-xs font-semibold text-[#475569]">
+              Mevcut parola
+              <input type="password" autoComplete="current-password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} required
+                className="w-full h-10 mt-1 px-3 rounded-lg bg-white border border-[#E2E8F0]" />
+            </label>
+            <label className="text-xs font-semibold text-[#475569]">
+              Yeni parola
+              <input type="password" autoComplete="new-password" value={newPassword} onChange={event => setNewPassword(event.target.value)} required minLength={16}
+                maxLength={1024} className="w-full h-10 mt-1 px-3 rounded-lg bg-white border border-[#E2E8F0]" />
+            </label>
+            <button type="submit" className="h-10 px-4 rounded-lg bg-[#00478F] text-white text-xs font-bold">Parolayı Güncelle</button>
+          </form>
+          {(profileMessage || profileError) && (
+            <div className={`lg:col-span-2 p-3 rounded-lg border text-xs font-semibold ${profileError ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+              {profileError || profileMessage}
+            </div>
+          )}
+        </div>
+      )}
+
       {activeSubTab === 'db' && (
+        <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs p-6 flex flex-col gap-5">
+          <div className="flex items-start gap-3">
+            <Database className="w-6 h-6 text-[#00478F]" />
+            <div>
+              <h2 className="text-sm font-bold text-[#1E293B]">Yerel SQLite Veritabanı</h2>
+              <p className="text-xs text-[#64748B] mt-1">CRM kayıtları sunucu tarafındaki SQLite veritabanında saklanır. Harici veritabanı bağlantısı şu anda yapılandırılmamıştır.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[['Firma', companies.length], ['Faaliyet', activities.length], ['Toplantı', meetings.length]].map(([label, count]) => (
+              <div key={label} className="rounded-lg bg-slate-50 border border-[#E2E8F0] p-4">
+                <div className="text-xs text-[#64748B]">{label}</div><div className="text-xl font-bold text-[#00478F]">{count}</div>
+              </div>
+            ))}
+          </div>
+          {testResult && !testResult.success && <p className="text-xs text-rose-700">{testResult.message}</p>}
+          <button type="button" onClick={handleCreateBackup} disabled={creatingBackup}
+            className="inline-flex items-center justify-center gap-2 self-start h-10 px-4 rounded-lg bg-[#00478F] text-white text-xs font-bold disabled:opacity-50">
+            <Download className="w-4 h-4" />{creatingBackup ? 'Yedek hazırlanıyor...' : 'SQLite Yedeğini İndir'}
+          </button>
+        </div>
+      )}
+
+      {/* Retired external database sync UI; configured providers are not connected to this application. */}
+      {false && activeSubTab === 'db' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Main DB Config Form (8 cols) */}
           <div className="lg:col-span-8 bg-white rounded-xl border border-[#E2E8F0] shadow-xs p-6 flex flex-col gap-5">
@@ -241,10 +407,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
 
               <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
-                config.isConnected ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-slate-100 text-slate-700'
+                config.status === 'connected' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-slate-100 text-slate-700'
               }`}>
-                <span className={`w-2 h-2 rounded-full ${config.isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
-                {config.isConnected ? 'Bağlantı Aktif' : 'Bağlantı Bekliyor'}
+                <span className={`w-2 h-2 rounded-full ${config.status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                {config.status === 'connected' ? 'Bağlantı Aktif' : 'Bağlantı Bekliyor'}
               </span>
             </div>
 
@@ -334,13 +500,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <div>
                 <label className="text-[11px] uppercase font-bold text-[#64748B] block mb-1">
-                  Şifre (Güvenli Şifrelenmiş)
+                  Şifre (Bu oturumda saklanmaz)
                 </label>
                 <div className="relative">
                   <input
                     type="password"
-                    value={config.password}
+                    value={config.password || ''}
                     onChange={e => setConfig({ ...config, password: e.target.value })}
+                    autoComplete="new-password"
                     className="w-full h-10 px-3 rounded-lg bg-[#f1f4f7] border border-[#E2E8F0] font-semibold text-[#1E293B] focus:outline-none"
                   />
                   <Lock className="w-4 h-4 text-[#64748B] absolute right-3 top-1/2 -translate-y-1/2" />
@@ -351,14 +518,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             {/* Otomatik Senkronizasyon Periyodu */}
             <div className="p-4 rounded-xl bg-[#f1f4f7] border border-[#E2E8F0] flex flex-col gap-3 text-xs">
               <span className="font-bold text-[#1E293B] uppercase tracking-wide">
-                Otomatik Veri Çekme Zamanlayıcısı
+                Senkronizasyon Tercihi
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] text-[#64748B] font-bold block mb-1">Senkronizasyon Sıklığı</label>
                   <select
                     value={config.syncFrequency}
-                    onChange={e => setConfig({ ...config, syncFrequency: e.target.value as any })}
+                    onChange={e => setConfig({ ...config, syncFrequency: e.target.value as DatabaseSyncConfig['syncFrequency'] })}
                     className="w-full h-10 px-3 rounded-lg bg-white border border-[#E2E8F0] font-bold text-[#1E293B]"
                   >
                     <option value="HOURLY">Her 1 Saatte Bir Otomatik Çek</option>
@@ -371,8 +538,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <label className="text-[11px] text-[#64748B] font-bold block mb-1">Hedef Tablo / Eşleşme</label>
                   <input
                     type="text"
-                    value={config.targetTable}
-                    onChange={e => setConfig({ ...config, targetTable: e.target.value })}
+                    value={config.tableName}
+                    onChange={e => setConfig({ ...config, tableName: e.target.value })}
                     className="w-full h-10 px-3 rounded-lg bg-white border border-[#E2E8F0] font-semibold text-[#1E293B]"
                   />
                 </div>
@@ -408,25 +575,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="lg:col-span-4 flex flex-col gap-4">
             <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs p-5 flex flex-col gap-3 text-xs">
               <span className="font-bold text-[#1E293B] uppercase text-[11px] text-[#00478F]">
-                Otomatik Çekme Durumu
+                Veri Senkronizasyon Durumu
               </span>
               <div className="p-3 rounded-lg bg-[#f1f4f7] space-y-2">
                 <div className="flex justify-between">
                   <span className="text-[#64748B]">Son Başarılı Çekme:</span>
-                  <span className="font-bold text-[#1E293B]">{config.lastSyncDate}</span>
+                  <span className="font-bold text-[#1E293B]">{config.lastSyncDate || 'Henüz senkronizasyon yapılmadı'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#64748B]">Son Çekilen Kayıt:</span>
-                  <span className="font-bold text-emerald-600">124 Kayıt</span>
+                  <span className="font-bold text-emerald-600">{config.successCount} Kayıt</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#64748B]">Bir Sonraki Planlı:</span>
-                  <span className="font-bold text-[#00478F]">Bugün 18:00</span>
+                  <span className="font-bold text-[#00478F]">{config.nextSyncTime || 'Etkin değil'}</span>
                 </div>
               </div>
 
               <p className="text-[11px] text-[#64748B] leading-relaxed">
-                Veritabanı servis modülü, yeni kurumsal kayıtları ve stajyer verilerini çekerken mevcut kayıtların kopyasını oluşturmaz, kimlik (vergi no / kod) eşleşmesiyle günceller.
+                Gerçek veri tabanı bağlantısı henüz yapılandırılmadı. Entegrasyon kurulana kadar dış sistemden veri çekilmez.
               </p>
 
               <button
@@ -637,7 +804,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => { DbSyncService.clearLogs(); setLogs([]); }}
+              onClick={async () => {
+                try {
+                  await DbSyncService.clearLogs();
+                  setLogs([]);
+                } catch (error) {
+                  setTestResult({
+                    success: false,
+                    message: error instanceof Error ? error.message : 'Senkronizasyon kayıtları silinemedi.',
+                  });
+                }
+              }}
               className="text-xs text-rose-600 hover:underline font-bold"
             >
               Günlüğü Temizle
