@@ -102,6 +102,79 @@ kontrolünü, testleri ve üretim derlemesini çalıştırır. Uygulama SQLite v
 sunucusu gerektirdiği için GitHub Pages tek başına uygun bir canlı yayın
 hedefi değildir.
 
+## Oracle Cloud VM'de yayınlama
+
+Mevcut SQLite ve Node.js sunucusunu koruyarak paylaşılabilir bir HTTPS adresi
+elde etmek için Oracle Cloud Infrastructure (OCI) üzerinde Ubuntu VM
+kullanılabilir. Burada Oracle Database servisi değil, uygulamanın çalışacağı
+OCI Compute VM gerekir. OCI kaynaklarının ücretsiz olup olmadığı ve bölgedeki
+kapasite, hesabınıza ve seçtiğiniz bölgeye bağlıdır; oluşturmadan önce OCI
+fiyatlandırmasını kontrol edin.
+
+1. OCI'de Ubuntu 24.04 VM oluşturun ve bir public IPv4 adresi atayın. SSH
+   (TCP 22) erişimini yalnızca kendi IP'nizle, HTTP/HTTPS (TCP 80/443)
+   erişimini internetten gelecek şekilde sınırlandırın. İşletim sistemi ve
+   uygulama verileri için yeterli kalıcı disk ayırın.
+2. Bir alan adınız varsa DNS'te `A` kaydını VM'nin public IP'sine yönlendirin.
+   HTTPS ve güvenli oturum çerezi için geçerli alan adı gereklidir; IP adresiyle
+   HTTP üzerinden paylaşım güvenli değildir.
+3. VM'ye SSH ile bağlanıp Git, Node.js 22.13+ ve Caddy kurun. Uygulama
+   hesabını ve kalıcı veri dizinlerini oluşturun:
+
+   ```bash
+   sudo useradd --system --create-home --shell /usr/sbin/nologin arelpro
+   sudo install -d -o arelpro -g arelpro /var/lib/arelpro/data /var/lib/arelpro/backups
+   sudo install -d -o root -g arelpro -m 0750 /etc/arelpro
+   sudo install -d -o root -g root -m 0755 /opt/arelpro
+   sudo git clone https://github.com/yavuzsonal/ArelPro-CRM.git /opt/arelpro/app
+   cd /opt/arelpro/app
+   sudo npm ci
+   sudo npm run build
+   ```
+
+4. `/etc/arelpro/arelpro.env` dosyasını oluşturun ve yalnızca sunucuda saklayın:
+
+   ```ini
+   ADMIN_USERNAME=your-admin-name
+   ADMIN_PASSWORD=use-a-unique-random-password-at-least-16-bytes
+   SESSION_SECRET=generate-a-random-secret-at-least-32-bytes
+   GEMINI_API_KEY=
+   ```
+
+   `SESSION_SECRET` için bu README'deki Node.js komutunu kullanın. Dosyaya
+   yalnızca `arelpro` hesabının okuyabileceği izin verin:
+
+   ```bash
+   sudo chown root:arelpro /etc/arelpro/arelpro.env
+   sudo chmod 0640 /etc/arelpro/arelpro.env
+   ```
+
+5. DNS kaydı etkinleştikten sonra `deployment/Caddyfile.example` dosyasını
+   `/etc/caddy/Caddyfile` konumuna kopyalayın ve `crm.example.com` yerine kendi
+   alan adınızı yazın. OCI ağ güvenlik listesi ve Ubuntu güvenlik duvarında
+   80/443 portlarının açık olduğundan emin olun.
+6. `deployment/arelpro.service` dosyasını
+   `/etc/systemd/system/arelpro.service` konumuna kopyalayın. Sonra servisleri
+   etkinleştirin:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now arelpro
+   sudo systemctl reload caddy
+   ```
+
+   Durumu `sudo systemctl status arelpro` ile, uygulama loglarını
+   `sudo journalctl -u arelpro -f` ile kontrol edin. Caddy, alan adı DNS'i ve
+   port erişimi doğruysa HTTPS sertifikasını otomatik alır. Uygulama
+   `https://<alan-adiniz>` adresinden paylaşılabilir.
+
+SQLite dosyası `/var/lib/arelpro/data/arelpro.sqlite` konumunda kalıcı diskte
+tutulur. VM veya disk oluşturulduktan sonra otomatik yedekleme ve geri yükleme
+prosedürünü ayrıca ayarlayın; VM'nin tek kopyası yedek sayılmaz. Yeni sürüm
+yayımlarken uygulama dosyalarını güncelleyip `npm ci`, `npm run build` ve
+`sudo systemctl restart arelpro` çalıştırın. Secret değerlerini GitHub'a
+eklemeyin veya sohbet üzerinden paylaşmayın.
+
 ## Canlı kullanım notları
 
 Bu proje tek bir yerel yönetici hesabı içerir; çok kullanıcılı hesap/rol

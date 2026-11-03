@@ -1,0 +1,26 @@
+[Unit]
+Description=ArelPro CRM
+After=network.target
+
+[Service]
+Type=simple
+User=arelpro
+Group=arelpro
+WorkingDirectory=/opt/arelpro/app
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+Environment=CRM_DB_PATH=/var/lib/arelpro/data/arelpro.sqlite
+Environment=CRM_BACKUP_DIR=/var/lib/arelpro/backups
+EnvironmentFile=/etc/arelpro/arelpro.env
+ExecStart=/usr/bin/node /opt/arelpro/app/dist/server.cjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/arelpro
+
+[Install]
+WantedBy=multi-user.target
